@@ -1,7 +1,20 @@
 /**
+ 
+Spatial Marker is calling to 8 different A-Frame components develloped in this script and is the one to use the a-scene.
+
+The 8 components are:
+- painting-area-controller: manages the draxing area and enables/disables drawing and locomotion according to the position of the rig
+- paint-tool-reset: manages the assignment of the painting hand and the palette hand
+- hand-swapper: allows swapping the painting hand and palette hand
+- draw-line: allows drawing lines in 3D space
+- size-picker: allows selecting marker sizes (4 sizes)
+- color-picker: allows selecting marker colors (24 colors)
+- thumbstick-controls: enables locomotion with thumbsticks for meta-touch-controls
+- button-colorizer: tints controller buttons to according to the UI
 
  */
 
+// SPATIAL-MARKER
 AFRAME.registerComponent('spatial-marker', { 
   schema: {
     // --- Painting zone selection/creation ---
@@ -17,7 +30,7 @@ AFRAME.registerComponent('spatial-marker', {
     // --- Size-picker passthrough (applied whenever size-picker appears) ---
     markerSize:           { default: [0.0025,0.005,0.01,0.02,] },
     hintSize:        { default: 0.1 },
-    imgHint:         { default: 'assets/UI.png' },
+    imgHint:         { default: 'https://rpetitjean.github.io/spatial-marker/assets/UI.png' },
     billboardHints:  { default: true },
 
     // --- Color-picker passthrough (applied whenever color-picker appears) ---
@@ -170,6 +183,7 @@ _applySizePickerOptions(handEl){
 
 
 // 1) PAINTING-AREA-CONTROLLER
+// manages the draxing area and enables/disables drawing and locomotion according to the position of the rig
 AFRAME.registerComponent('painting-area-controller', {
   schema: { areaSelector: { default: '.drawingArea' } },
 
@@ -355,6 +369,7 @@ _clearTints() {
 
 
 // 2) PAINT-TOOL-RESET
+// manages the assignment of the painting hand and the palette hand
 AFRAME.registerComponent('paint-tool-reset', {
   init() {
     this.leftHand     = document.getElementById('left-hand');
@@ -423,6 +438,7 @@ AFRAME.registerComponent('paint-tool-reset', {
 });
 
 // 3) HAND-SWAPPER
+// allows swapping the painting hand and palette hand
 AFRAME.registerComponent('hand-swapper', {
   init() {
     this.leftHand  = document.getElementById('left-hand');
@@ -488,6 +504,7 @@ AFRAME.registerComponent('hand-swapper', {
 });
 
 // 4) DRAW-LINE
+// allows drawing lines
 AFRAME.registerComponent('draw-line', {
   schema: {
     color:     { type:'color',  default:'#ffffff' },
@@ -611,10 +628,7 @@ AFRAME.registerComponent('draw-line', {
 });
 
 // 5) SIZE-PICKER
-// SIZE-PICKER — 4 options max, clamp [0.001,0.04],
-// same outer radius for all rings, band width ∝ thickness (relative to the 4 values)
-// 5) SIZE-PICKER — 4 options max, clamp [0.001,0.04],
-// ring outer radius encodes size; band width constant
+// allows selecting marker sizes (4 sizes)
 AFRAME.registerComponent('size-picker',{
   schema:{
     sizes:{ default:[0.0025,0.005,0.01,0.02] },
@@ -822,8 +836,8 @@ AFRAME.registerComponent('size-picker',{
   }
 });
 
-
-// 6) COLOR-PICKER — rebuilds on colors change + robust parsing
+// 6) COLOR-PICKER
+// allows selecting marker colors (up to 24 colors in a palette)
 AFRAME.registerComponent('color-picker',{
   schema:{
     colors:{ default:[
@@ -836,7 +850,7 @@ AFRAME.registerComponent('color-picker',{
     ]},
     bgRadius:  { default: 0.11 },
     bgColor:   { default: '#ffffff' },
-    bgOpacity: { default: 0.6 },
+    bgOpacity: { default: 0.8 },
     faceDown:  { default: true },   // palette faces floor by default
     invertY:   { default: true }    // stick up -> visually up
   },
@@ -999,8 +1013,8 @@ AFRAME.registerComponent('color-picker',{
     const y = this.cellY[this.selected] ?? 0;
 
     // Move ring now
-    this.ring.setAttribute('position', `${x} ${y} 0.01`);
-    if (this.ring.object3D) this.ring.object3D.position.set(x, y, 0.01);
+    this.ring.setAttribute('position', `${x} ${y} 0.001`);
+    if (this.ring.object3D) this.ring.object3D.position.set(x, y, 0.001);
 
     // Set brush color to selected swatch
     const brush=document.querySelector('[active-brush]');
@@ -1051,6 +1065,7 @@ AFRAME.registerComponent('color-picker',{
 });
 
 // 7) THUMBSTICK-CONTROLS
+// basic VRlocomotion using meta-touch-controls thumbstick
 AFRAME.registerComponent('thumbstick-controls', {
     schema: {
         acceleration: { default: 25 },
@@ -1170,6 +1185,7 @@ AFRAME.registerComponent('thumbstick-controls', {
 });
 
 // 8) BUTTON-COLORIZER
+// tints controller buttons based on the UI
 AFRAME.registerComponent('button-colorizer', {
   schema: {
     enabled:           { default: true },  // <- NEW: opt-in tinting
