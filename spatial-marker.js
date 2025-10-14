@@ -1478,3 +1478,187 @@ AFRAME.registerComponent('button-colorizer', {
     });
   }
 });
+
+// 9) DUAL-GRIP-EXPORTER
+AFRAME.registerComponent('dual-grip-exporter', {
+  schema: {
+    // Hold both grips this many ms to trigger.
+    holdMs: { default: 600 },
+    // Export GLB (true) or .gltf JSON (false)
+    binary: { default: true },
+    // What to export: 'scene' or a CSS selector (e.g. '#rig', '.someRoot')
+    rootSelector: { default: 'scene' },
+    // Auto-load GLTFExporter if missing
+    autoloadExporter: { default: true },
+    // Optional: exclude entities that match this selector (comma-separated)
+    exclude: { default: '' }
+  },
+
+  init() {
+    this.left  = document.getElementById('left-hand');
+    this.right = document.getElementById('right-hand');
+    this._down = { left:false, right:false };
+    this._timer = null;
+    this._cooldown = false;
+
+    this._onGripDown = this._onGripDown.bind(this);
+    this._onGripUp   = this._onGripUp.bind(this);
+
+    this.left  && this.left .addEventListener('gripdown', this._onGripDown);
+    this.right && this.right.addEventListener('gripdown', this._onGripDown);
+    this.left  && this.left .addEventListener('gripup',   this._onGripUp);
+    this.right && this.right.addEventListener('gripup',   this._onGripUp);
+
+    // Prepare exporter (lazy load if needed)
+    this._exporterReady = this._ensureExporter();
+  },
+
+  remove() {
+    this.left  && this.left .removeEventListener('gripdown', this._onGripDown);
+    this.right && this.right.removeEventListener('gripdown', this._onGripDown);
+    this.left  && this.left .removeEventListener('gripup',   this._onGripUp);
+    this.right && this.right.removeEventListener('gripup',   this._onGripUp);
+    clearTimeout(this._timer);
+  },
+
+  _onGripDown(evt) {
+    if (evt.currentTarget === this.left)  this._down.left  = true;
+    if (evt.currentTarget === this.right) this._down.right = true;
+    this._maybeStartTimer();
+  },
+
+  _onGripUp(evt) {
+    if (evt.currentTarget === this.left)  this._down.left  = false;
+    if (evt.currentTarget === this.right) this._down.right = false;
+    clearTimeout(this._timer); this._timer = null;
+  },
+
+  _maybeStartTimer() {
+    if (this._timer || this._cooldown) return;
+    if (this._down.left && this._down.right) {
+      this._timer = setTimeout(() => {
+        this._timer = null;
+        if (this._down.left && this._down.right) this._export();
+      }, this.data.holdMs);
+    }
+  },
+
+  async _ensureExporter() {
+    if (AFRAME.THREE && AFRAME.THREE.GLTFExporter) return true;
+    if (!this.data.autoloadExporter) {
+      console.warn('[dual-grip-exporter] THREE.GLTFExporter not found. Include it before using this component.');
+      return false;
+    }
+    // Load a legacy (non-module) GLTFExporter that attaches to THREE.*
+    // Match r152 (A-Frame 1.7.0’s Three)
+    const url = 'https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/exporters/GLTFExporter.js';
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = url; s.async = true;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Failed to load GLTFExporter'));
+      document.head.appendChild(s);
+    }).catch(e => console.warn('[dual-grip-exporter]', e));
+    return !!(AFRAME.THREE && AFRAME.THREE.GLTFExporter);
+  },
+
+  _getRootObject3D() {
+    if (this.data.rootSelector === 'scene') return this.el.sceneEl.object3D;
+    const el = document.querySelector(this.data.rootSelector);
+    return (el && el.object3D) ? el.object3D : this.el.sceneEl.object3D;
+  },
+
+  _collectExclusionUUIDs(root) {
+    if (!this.data.exclude) return new Set();
+    const set = new Set();
+    const sels = this.data.exclude.split(',').map(s => s.trim()).filter(Boolean);
+    sels.forEach(sel => {
+      document.querySelectorAll(sel).forEach(el => {
+        if (el && el.object3D) set.add(el.object3D.uuid);
+      });
+    });
+    return set;
+  },
+
+  async _export() {
+    this._cooldown = true;
+    setTimeout(()=>{ this._cooldown = false; }, 1500);
+
+    const ok = await this._exporterReady;
+    if (!ok) return;
+
+    const THREE = AFRAME.THREE;
+    const exporter = new THREE.GLTFExporter();
+
+    // Choose root
+    const root = this._getRootObject3D();
+
+    // Optional: filter out excluded nodes (controllers, debug helpers, etc.)
+    const excludeUUIDs = this._collectExclusionUUIDs(root);
+    const options = {
+      binary: this.data.binary,
+      onlyVisible: true,
+      embedImages: true,
+      trs: false,
+      // Prune excluded by passing a custom traverseVisible callback
+      // (GLTFExporter doesn't expose a direct filter; we clone and hide instead)
+    };
+
+    // Cheap filter: temporarily set visible=false on excluded subtrees
+    const hidden = [];
+    if (excludeUUIDs.size) {
+      root.traverse(o => {
+        if (excludeUUIDs.has(o.uuid)) {
+          hidden.push({o, v:o.visible});
+          o.visible = false;
+        }
+      });
+    }
+
+    try {
+      exporter.parse(
+        root,
+        (result) => {
+          // Restore visibilities we hid
+          hidden.forEach(h => h.o.visible = h.v);
+
+          const ts = new Date();
+          const pad = n => (n<10?'0':'')+n;
+          const name = `spatial-marker_${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}_${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`;
+
+          if (this.data.binary) {
+            const blob = new Blob([result], { type: 'model/gltf-binary' });
+            this._saveBlob(blob, `${name}.glb`);
+          } else {
+            const json = JSON.stringify(result);
+            const blob = new Blob([json], { type: 'model/gltf+json' });
+            this._saveBlob(blob, `${name}.gltf`);
+          }
+          console.log('[dual-grip-exporter] Export complete.');
+        },
+        (err) => {
+          // Restore on error too
+          hidden.forEach(h => h.o.visible = h.v);
+          console.warn('[dual-grip-exporter] Export failed:', err);
+        },
+        options
+      );
+    } catch (e) {
+      hidden.forEach(h => h.o.visible = h.v);
+      console.warn('[dual-grip-exporter] Exception during export:', e);
+    }
+  },
+
+  _saveBlob(blob, filename) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    // cleanup
+    setTimeout(() => {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 2000);
+  }
+});
