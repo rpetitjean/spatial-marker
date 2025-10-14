@@ -1480,7 +1480,7 @@ AFRAME.registerComponent('button-colorizer', {
 });
 
 // 9) DUAL-GRIP-EXPORTER
-// 9) DUAL-GRIP-EXPORTER (complete, drop-in)
+// 9) DUAL-GRIP-EXPORTER (robust autoload fix: temporarily map window.THREE -> AFRAME.THREE)
 AFRAME.registerComponent('dual-grip-exporter', {
   schema: {
     holdMs:           { default: 600 },     // hold both grips this long
@@ -1580,6 +1580,23 @@ AFRAME.registerComponent('dual-grip-exporter', {
       return false;
     }
 
+    // Some browsers/CDNs load the non-module exporter expecting a global window.THREE.
+    // Ensure it points to AFRAME.THREE while loading, then restore.
+    const withGlobalTHREE = async (loader) => {
+      const prev = window.THREE;
+      try {
+        window.THREE = AFRAME.THREE;
+        await loader();
+      } finally {
+        // Keep GLTFExporter aliased onto AFRAME.THREE
+        if (window.THREE?.GLTFExporter && !AFRAME.THREE.GLTFExporter) {
+          AFRAME.THREE.GLTFExporter = window.THREE.GLTFExporter;
+        }
+        // Restore previous window.THREE (if any)
+        if (prev) window.THREE = prev; else delete window.THREE;
+      }
+    };
+
     const rev = (AFRAME.THREE && AFRAME.THREE.REVISION) ? AFRAME.THREE.REVISION : 152;
     const candidates = [
       `https://cdn.jsdelivr.net/npm/three@0.${rev}.0/examples/js/exporters/GLTFExporter.js`,
@@ -1600,8 +1617,8 @@ AFRAME.registerComponent('dual-grip-exporter', {
 
     for (const url of candidates) {
       try {
-        await loadScript(url);
-        if (aliasIfPresent()) return true;
+        await withGlobalTHREE(() => loadScript(url));
+        if (AFRAME.THREE.GLTFExporter) return true;
       } catch (_e) {
         console.warn('[dual-grip-exporter] failed to load', url);
       }
