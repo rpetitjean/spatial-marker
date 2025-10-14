@@ -6,7 +6,14 @@
     <meta name="description" content="A demo of the Spatial-Marker component">
     
     <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/exporters/GLTFExporter.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.173.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.173.0/examples/jsm/"
+  }
+}
+</script>
 
     <script src="spatial-marker.js"></script>
 
@@ -15,7 +22,7 @@
 
   <body>
 
-    <a-scene background="color: #ECECEC"  dual-grip-exporter="exclude:#left-hand,#right-hand,.drawingArea">
+    <a-scene background="color: #ECECEC">
 
           <!-- PC & VR Rig -->
     <a-entity  id="rig" spatial-marker >
@@ -29,6 +36,80 @@
 
 
     </a-scene>
+
+<script type="module">
+  import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+  // ---- helpers ----
+  function saveBlob(blob, filename) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  }
+
+  function exportSceneGLB(rootObj3D, filenamePrefix = 'spatial-marker') {
+    const exporter = new GLTFExporter();
+    const t = new Date();
+    const pad = n => (n < 10 ? '0' : '') + n;
+    const name = `${filenamePrefix}_${t.getFullYear()}${pad(t.getMonth()+1)}${pad(t.getDate())}_${pad(t.getHours())}${pad(t.getMinutes())}${pad(t.getSeconds())}.glb`;
+
+    exporter.parse(
+      rootObj3D,
+      (result) => saveBlob(new Blob([result], { type: 'model/gltf-binary' }), name),
+      (err) => console.warn('[export] failed:', err),
+      { binary: true, onlyVisible: true, embedImages: true }
+    );
+  }
+
+  // ---- desktop shortcut (press "E") ----
+  window.addEventListener('keydown', (e) => {
+    if ((e.key || '').toLowerCase() === 'e') {
+      const scene = document.querySelector('a-scene')?.object3D;
+      if (scene) exportSceneGLB(scene);
+    }
+  });
+
+  // ---- VR dual-grip hold (no component needed) ----
+  const HOLD_MS = 600;
+  const left  = document.getElementById('left-hand');
+  const right = document.getElementById('right-hand');
+  const state = { left:false, right:false, timer:null, cooldown:false };
+
+  function tryStartTimer() {
+    if (state.timer || state.cooldown) return;
+    if (state.left && state.right) {
+      state.timer = setTimeout(() => {
+        state.timer = null;
+        if (state.left && state.right) {
+          state.cooldown = true;
+          setTimeout(() => state.cooldown = false, 1200);
+          const scene = document.querySelector('a-scene')?.object3D;
+          if (scene) exportSceneGLB(scene);
+        }
+      }, HOLD_MS);
+    }
+  }
+
+  function onPress(evt) {
+    const side = (evt.currentTarget === left) ? 'left' : 'right';
+    state[side] = true; tryStartTimer();
+  }
+  function onRelease(evt) {
+    const side = (evt.currentTarget === left) ? 'left' : 'right';
+    state[side] = false; if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+  }
+
+  const pressEvts   = ['gripdown','squeezestart'];
+  const releaseEvts = ['gripup','squeezeend'];
+  [left, right].forEach(h => {
+    if (!h) return;
+    pressEvts.forEach(e => h.addEventListener(e, onPress));
+    releaseEvts.forEach(e => h.addEventListener(e, onRelease));
+  });
+</script>
 
 
   </body>
