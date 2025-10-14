@@ -5,7 +5,7 @@
 AFRAME.registerComponent('spatial-marker', { 
   schema: {
     // --- Painting zone selection/creation ---
-    areaSelector:    { default: '.paintingArea' },
+    areaSelector:    { default: '.drawingArea' },
     autoArea:        { default: true },
     areaSize:        { default: '4 4' },           // "width height"
     areaPosition:    { default: '0 0 -4' },        // "x y z"
@@ -171,7 +171,7 @@ _applySizePickerOptions(handEl){
 
 // 1) PAINTING-AREA-CONTROLLER
 AFRAME.registerComponent('painting-area-controller', {
-  schema: { areaSelector: { default: '.paintingArea' } },
+  schema: { areaSelector: { default: '.drawingArea' } },
 
  CONTROLLER_COLORS: {
   right: { a:'#E94462', b:'#80A8FF', grip:'#d4e700' },
@@ -917,7 +917,7 @@ AFRAME.registerComponent('color-picker',{
     bg.setAttribute('radius', this.data.bgRadius);
     bg.setAttribute('segments', 64);
     bg.setAttribute('material', `color:${this.data.bgColor}; opacity:${this.data.bgOpacity}; transparent:true; side:double`);
-    bg.setAttribute('position','0 0 -0.005');
+    bg.setAttribute('position','0 0 -0.001');
     this.container.appendChild(bg);
   },
 
@@ -943,7 +943,7 @@ AFRAME.registerComponent('color-picker',{
     ring.setAttribute('radius-inner', r*0.8);
     ring.setAttribute('radius-outer', r*1.2);
     ring.setAttribute('material', 'color:#D6D6D6; side:double');
-    ring.setAttribute('position', '0 0 0.01'); // will be moved in _applyColor
+    ring.setAttribute('position', '0 0 0.001'); // will be moved in _applyColor
     this.container.appendChild(ring);
     this.ring = ring;
   },
