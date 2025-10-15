@@ -40,7 +40,7 @@
 <script type="module">
   import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
-  // ---- helpers ----
+  // ---------- helpers ----------
   function saveBlob(blob, filename) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -49,67 +49,143 @@
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
   }
-
   function timestampedName(prefix) {
-    const t = new Date();
-    const pad = n => (n < 10 ? '0' : '') + n;
+    const t = new Date(), pad = n => (n<10?'0':'')+n;
     return `${prefix}_${t.getFullYear()}${pad(t.getMonth()+1)}${pad(t.getDate())}_${pad(t.getHours())}${pad(t.getMinutes())}${pad(t.getSeconds())}.glb`;
   }
+  function syncWorld(root) { try { root.updateMatrixWorld(true); } catch(_){} }
 
-  // Some scenes need a matrix world flush before export (prevents odd transforms)
-  function syncWorld(rootObj3D) {
-    try { rootObj3D.updateMatrixWorld(true); } catch(_) {}
+  // ---------- scene sanitization ----------
+  function hidePotentiallyTexturedNodes(root) {
+    const toHide = new Set();
+    const sels = [
+      '#left-hand', '#right-hand',
+      '.drawingArea',
+      '[src]',              // <a-image>, <a-plane src=...>, etc.
+      '[material*="src:"]'  // material with src:
+    ];
+    sels.forEach(sel => {
+      document.querySelectorAll(sel).forEach(el => {
+        if (el?.object3D && el.object3D.visible) {
+          toHide.add(el.object3D);
+        }
+      });
+    });
+
+    // Also hide any mesh that has a texture map (defensive).
+    root.traverse(o => {
+      if (o.isMesh) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        if (mats.some(m => m && (m.map || m.emissiveMap || m.roughnessMap || m.metalnessMap))) {
+          toHide.add(o);
+        }
+      }
+    });
+
+    const hidden = [];
+    toHide.forEach(o => { hidden.push({o, v:o.visible}); o.visible = false; });
+    return () => hidden.forEach(h => h.o.visible = h.v);
   }
 
-  // ---- export presets ----
+  function sanitizeGeometry(root) {
+    const tmp = new Float32Array(3);
+    let fixed = 0, dropped = 0;
+
+    root.traverse(o => {
+      if (!o.isMesh || !o.geometry || !o.geometry.isBufferGeometry) return;
+      const g = o.geometry;
+
+      // Ensure drawRange is valid
+      const pos = g.getAttribute('position');
+      if (!pos || pos.count < 3) {          // nothing to render
+        o.visible = false; dropped++; return;
+      }
+      g.setDrawRange(0, pos.count);
+
+      // Remove NaN/Inf in positions/normals/uvs
+      ['position','normal','uv'].forEach(name => {
+        const attr = g.getAttribute(name);
+        if (!attr) return;
+        const arr = attr.array;
+        let dirty = false;
+        for (let i=0; i<arr.length; i++) {
+          const v = arr[i];
+          if (!Number.isFinite(v)) { arr[i] = 0; dirty = true; }
+        }
+        if (dirty) { attr.needsUpdate = true; fixed++; }
+      });
+
+      // If no normals or likely broken, recompute
+      if (!g.getAttribute('normal') || !g.getAttribute('normal').count) {
+        try { g.computeVertexNormals(); fixed++; } catch(_){}
+      }
+
+      // Force indexed geometry for Blender
+      if (!g.index) {
+        try {
+          const indexed = g.toNonIndexed ? null : null; // ensure method exists
+          const tmpGeom = g.toNonIndexed ? g.toNonIndexed() : null; // older pattern
+        } catch(_){}
+        try { g.setIndex([...Array(pos.count).keys()]); fixed++; } catch(_){}
+      }
+    });
+    // console.log('[sanitize]', {fixed, dropped});
+  }
+
+  // ---------- exporter presets ----------
   const REGULAR_OPTS = {
     binary: true,
     onlyVisible: true,
     embedImages: true
-    // (default includeCustomExtensions:true)
   };
 
-  // This preset avoids custom extensions & huge embedded textures;
-  // helps Blender 4.x and older Windows viewers.
   const BLENDER_SAFE_OPTS = {
     binary: true,
     onlyVisible: true,
-    embedImages: false,          // textures as data URIs or external refs
+    embedImages: true,           // we hid textured nodes, so this is safe now
     includeCustomExtensions: false,
-    truncateDrawRange: true,     // trims unused ranges
+    forceIndices: true,
+    truncateDrawRange: true,
     trs: false
   };
 
-  function exportGLB(rootObj3D, filenamePrefix, options) {
+  function exportGLB(root, prefix, opts) {
     const exporter = new GLTFExporter();
-    syncWorld(rootObj3D);
-    const name = timestampedName(filenamePrefix);
+    syncWorld(root);
+
+    // Temporarily hide problematic bits & sanitize geometry
+    const restore = hidePotentiallyTexturedNodes(root);
+    sanitizeGeometry(root);
+
     exporter.parse(
-      rootObj3D,
-      (result) => saveBlob(new Blob([result], { type: 'model/gltf-binary' }), name),
-      (err) => console.warn('[export] failed:', err),
-      options
+      root,
+      (result) => {
+        restore();
+        const name = timestampedName(prefix);
+        saveBlob(new Blob([result], { type: 'model/gltf-binary' }), name);
+      },
+      (err) => {
+        restore();
+        console.warn('[export] failed:', err);
+      },
+      opts
     );
   }
 
   // Friendly wrappers
-  function exportSceneGLB(rootObj3D) {
-    exportGLB(rootObj3D, 'spatial-marker', REGULAR_OPTS);
-  }
-  function exportSceneGLB_BlenderSafe(rootObj3D) {
-    exportGLB(rootObj3D, 'spatial-marker_blender', BLENDER_SAFE_OPTS);
-  }
+  function exportSceneGLB(root)                  { exportGLB(root, 'spatial-marker', REGULAR_OPTS); }
+  function exportSceneGLB_BlenderSafe(root)      { exportGLB(root, 'spatial-marker_blender', BLENDER_SAFE_OPTS); }
 
-  // ---- desktop shortcuts ----
+  // ---------- desktop shortcuts ----------
   window.addEventListener('keydown', (e) => {
     const scene = document.querySelector('a-scene')?.object3D;
     if (!scene) return;
     const k = (e.key || '').toLowerCase();
-    if (k === 'e') exportSceneGLB(scene);             // regular
-    if (k === 'b') exportSceneGLB_BlenderSafe(scene); // blender-safe
+    if (k === 'e') exportSceneGLB(scene);             // regular (fast)
+    if (k === 'b') exportSceneGLB_BlenderSafe(scene); // Blender-safe (recommended)
   });
 
-  // ---- VR dual-grip hold (no component needed) ----
+  // ---------- VR dual-grip hold ----------
   const HOLD_MS = 600;
   const left  = document.getElementById('left-hand');
   const right = document.getElementById('right-hand');
@@ -124,32 +200,18 @@
           state.cooldown = true;
           setTimeout(() => state.cooldown = false, 1200);
           const scene = document.querySelector('a-scene')?.object3D;
-          if (scene) {
-            // Use BLENDER-SAFE by default from VR (most robust for post-workflows)
-            exportSceneGLB_BlenderSafe(scene);
-          }
+          if (scene) exportSceneGLB_BlenderSafe(scene);
         }
       }, HOLD_MS);
     }
   }
+  function onPress(evt)   { const s = (evt.currentTarget===left)?'left':'right'; state[s]=true;  tryStartTimer(); }
+  function onRelease(evt) { const s = (evt.currentTarget===left)?'left':'right'; state[s]=false; if(state.timer){clearTimeout(state.timer); state.timer=null;} }
 
-  function onPress(evt) {
-    const side = (evt.currentTarget === left) ? 'left' : 'right';
-    state[side] = true; tryStartTimer();
-  }
-  function onRelease(evt) {
-    const side = (evt.currentTarget === left) ? 'left' : 'right';
-    state[side] = false; if (state.timer) { clearTimeout(state.timer); state.timer = null; }
-  }
-
-  const pressEvts   = ['gripdown','squeezestart'];
-  const releaseEvts = ['gripup','squeezeend'];
-  [left, right].forEach(h => {
-    if (!h) return;
-    pressEvts.forEach(e => h.addEventListener(e, onPress));
-    releaseEvts.forEach(e => h.addEventListener(e, onRelease));
-  });
+  ['gripdown','squeezestart'].forEach(e => { left?.addEventListener(e, onPress);  right?.addEventListener(e, onPress);  });
+  ['gripup','squeezeend'  ].forEach(e => { left?.addEventListener(e, onRelease); right?.addEventListener(e, onRelease); });
 </script>
+
 
 
 
