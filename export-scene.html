@@ -50,26 +50,63 @@
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
   }
 
-  function exportSceneGLB(rootObj3D, filenamePrefix = 'spatial-marker') {
-    const exporter = new GLTFExporter();
+  function timestampedName(prefix) {
     const t = new Date();
     const pad = n => (n < 10 ? '0' : '') + n;
-    const name = `${filenamePrefix}_${t.getFullYear()}${pad(t.getMonth()+1)}${pad(t.getDate())}_${pad(t.getHours())}${pad(t.getMinutes())}${pad(t.getSeconds())}.glb`;
+    return `${prefix}_${t.getFullYear()}${pad(t.getMonth()+1)}${pad(t.getDate())}_${pad(t.getHours())}${pad(t.getMinutes())}${pad(t.getSeconds())}.glb`;
+  }
 
+  // Some scenes need a matrix world flush before export (prevents odd transforms)
+  function syncWorld(rootObj3D) {
+    try { rootObj3D.updateMatrixWorld(true); } catch(_) {}
+  }
+
+  // ---- export presets ----
+  const REGULAR_OPTS = {
+    binary: true,
+    onlyVisible: true,
+    embedImages: true
+    // (default includeCustomExtensions:true)
+  };
+
+  // This preset avoids custom extensions & huge embedded textures;
+  // helps Blender 4.x and older Windows viewers.
+  const BLENDER_SAFE_OPTS = {
+    binary: true,
+    onlyVisible: true,
+    embedImages: false,          // textures as data URIs or external refs
+    includeCustomExtensions: false,
+    truncateDrawRange: true,     // trims unused ranges
+    trs: false
+  };
+
+  function exportGLB(rootObj3D, filenamePrefix, options) {
+    const exporter = new GLTFExporter();
+    syncWorld(rootObj3D);
+    const name = timestampedName(filenamePrefix);
     exporter.parse(
       rootObj3D,
       (result) => saveBlob(new Blob([result], { type: 'model/gltf-binary' }), name),
       (err) => console.warn('[export] failed:', err),
-      { binary: true, onlyVisible: true, embedImages: true }
+      options
     );
   }
 
-  // ---- desktop shortcut (press "E") ----
+  // Friendly wrappers
+  function exportSceneGLB(rootObj3D) {
+    exportGLB(rootObj3D, 'spatial-marker', REGULAR_OPTS);
+  }
+  function exportSceneGLB_BlenderSafe(rootObj3D) {
+    exportGLB(rootObj3D, 'spatial-marker_blender', BLENDER_SAFE_OPTS);
+  }
+
+  // ---- desktop shortcuts ----
   window.addEventListener('keydown', (e) => {
-    if ((e.key || '').toLowerCase() === 'e') {
-      const scene = document.querySelector('a-scene')?.object3D;
-      if (scene) exportSceneGLB(scene);
-    }
+    const scene = document.querySelector('a-scene')?.object3D;
+    if (!scene) return;
+    const k = (e.key || '').toLowerCase();
+    if (k === 'e') exportSceneGLB(scene);             // regular
+    if (k === 'b') exportSceneGLB_BlenderSafe(scene); // blender-safe
   });
 
   // ---- VR dual-grip hold (no component needed) ----
@@ -87,7 +124,10 @@
           state.cooldown = true;
           setTimeout(() => state.cooldown = false, 1200);
           const scene = document.querySelector('a-scene')?.object3D;
-          if (scene) exportSceneGLB(scene);
+          if (scene) {
+            // Use BLENDER-SAFE by default from VR (most robust for post-workflows)
+            exportSceneGLB_BlenderSafe(scene);
+          }
         }
       }, HOLD_MS);
     }
@@ -110,6 +150,7 @@
     releaseEvts.forEach(e => h.addEventListener(e, onRelease));
   });
 </script>
+
 
 
   </body>
