@@ -18,14 +18,15 @@
 
     <a-scene light="defaultLightsEnabled: false">
 
-      <a-assets>
+  <a-assets>
     <a-asset-item id="env" src="/assets/env-photographs.glb"></a-asset-item>
     <a-asset-item id="camera-glb" src="/assets/Camera.glb"></a-asset-item>
+   <audio id="click" src="/assets/camera.mp3" preload="auto"></audio>
   </a-assets>
 
           <!-- PC & VR Rig -->
 <a-entity id="rig" spatial-marker="" wasd-controls="acceleration: 20" rotation="0 50 0" position="5.84296 0 -4.071428024999476"  
-picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#picture-camera; hotkeys: KeyP,KeyS; enableDblClick: true; pxWidth:6000; aspect:4:3">
+picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#picture-camera; hotkeys: KeyP,KeyS; enableDblClick: true; pxWidth:2000; aspect:4:3">
       <a-box camera="far: 700; fov: 75; near: 0.1; active: true" position="0 1.7 0" visible="false" ></a-box>
       <a-entity id="left-hand" meta-touch-controls="" thumbstick-controls="" button-colorizer="enabled: false"></a-entity>
       <a-entity id="right-hand" meta-touch-controls="hand: right" thumbstick-controls="" draw-line="color: #f2f23a; thickness: 0.0025" active-brush="" button-colorizer="enabled: false"></a-entity>
@@ -49,6 +50,7 @@ picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#
   <!-- Picture Camera element -->
 <a-entity id="picture-camera" camera="active: false; spectator: true; zoom: 1.28" position="0 2.21779 -3.78429" rotation="-12 0 0">
  <a-entity gltf-model="/assets/Camera.glb" position="0 0.00385 0.24798" scale="0.1 0.1 0.1"></a-entity>
+<a-sound src="#click"  ></a-sound>
 </a-entity>
 
 
@@ -57,27 +59,41 @@ picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#
 <script>
 AFRAME.registerComponent('picture-camera-capture', {
   schema: {
+    // VR inputs
     leftHand:   {default: '#left-hand'},
     rightHand:  {default: '#right-hand'},
     pictureCam: {default: '#picture-camera'},
 
-    hotkeys:           {default: 'KeyP,KeyS'},
+    // Desktop triggers
+    hotkeys:           {default: 'KeyP,KeyS'}, // KeyboardEvent.code values
     enableDblClick:    {default: true},
     hotkeysWhenTyping: {default: false},
 
-    // Exact output size (in pixels). If only one is set, the other is derived from aspect.
-    pxWidth:  {default: 1600},
-    pxHeight: {default: 0},
-    aspect:   {default: '4:3'} // "16:9", "1:1", "4:3", or numeric like "1.7777"
+    // Output sizing (pixels)
+    pxWidth:  {default: 1600}, // 0 = auto from height & aspect
+    pxHeight: {default: 0},    // 0 = auto from width & aspect
+    aspect:   {default: '4:3'},// e.g. "16:9", "1:1", "4:3" or number like "1.7777"
+
+    // Sound
+    enableSound:  {default: true},
+    soundSelector:{default: 'a-sound,[sound]'} // searched inside pictureCam
   },
 
   init() {
     const scene = this.el.sceneEl;
     if (!scene.components.screenshot) scene.setAttribute('screenshot', '');
 
+    // Cache entities
     this.left  = document.querySelector(this.data.leftHand);
     this.right = document.querySelector(this.data.rightHand);
     this.pic   = document.querySelector(this.data.pictureCam);
+
+    // Find a-sound inside the picture camera (or the camera itself if it has [sound])
+    this.soundEl = null;
+    if (this.pic) {
+      this.soundEl = this.pic.querySelector(this.data.soundSelector) ||
+                     (this.pic.components && this.pic.components.sound ? this.pic : null);
+    }
 
     this.state = { y:false, b:false, lock:false, timeout:null };
     this.windowMs = 400;
@@ -107,6 +123,7 @@ AFRAME.registerComponent('picture-camera-capture', {
       if (this._hotkeySet.has(e.code)) { e.preventDefault(); this._snapNow(); }
     };
     this._onDblClick = ()=>{ if (this.data.enableDblClick) this._snapNow(); };
+
     window.addEventListener('keydown', this._onKeyDown);
     if (this.data.enableDblClick) window.addEventListener('dblclick', this._onDblClick);
   },
@@ -122,6 +139,7 @@ AFRAME.registerComponent('picture-camera-capture', {
     window.removeEventListener('dblclick', this._onDblClick);
   },
 
+  // --- helpers ---
   _clearWindow(){ if (this.state.timeout){ clearTimeout(this.state.timeout); this.state.timeout=null; } },
   _maybeSnap(){
     if (this.state.lock) return;
@@ -138,13 +156,8 @@ AFRAME.registerComponent('picture-camera-capture', {
 
   _parseAspect(){
     const a = (this.data.aspect||'4:3').toString().trim();
-    if (a.includes(':')) {
-      const [w,h]=a.split(':').map(Number);
-      if (w>0 && h>0) return w/h;
-    } else {
-      const n = parseFloat(a);
-      if (isFinite(n) && n>0) return n;
-    }
+    if (a.includes(':')) { const [w,h]=a.split(':').map(Number); if (w>0 && h>0) return w/h; }
+    const n = parseFloat(a); if (isFinite(n) && n>0) return n;
     return 4/3;
   },
   _computeSize(){
@@ -157,10 +170,23 @@ AFRAME.registerComponent('picture-camera-capture', {
     return {w,h, ar};
   },
 
+  _playClick(){
+    if (!this.data.enableSound || !this.soundEl) return;
+    const comp = this.soundEl.components && this.soundEl.components.sound;
+    if (!comp) return;
+    try {
+      if (comp.isPlaying) comp.stopSound();
+      comp.playSound();
+    } catch(e){
+      // ignore sound policy errors silently
+    }
+  },
+
+  // Offscreen render (no stretching, no XR flicker)
   async _captureOffscreen(){
     const sceneEl = this.el.sceneEl;
-    const threeScene = sceneEl.object3D;     // THREE.Scene
-    const mainRend   = sceneEl.renderer;     // main renderer (XR)
+    const threeScene = sceneEl.object3D;
+    const mainRend   = sceneEl.renderer;
     const picEl      = this.pic;
     if (!picEl) { console.warn('[picture-camera-capture] No pictureCam entity'); return; }
 
@@ -173,27 +199,21 @@ AFRAME.registerComponent('picture-camera-capture', {
     const {w,h} = this._computeSize();
     const targetAspect = w / h;
 
-    // Clone the camera so we don't mutate the live one
+    // Clone camera so we don't mutate live one
     const camClone = picCam.clone();
     camClone.matrixAutoUpdate = false;
-
-    // Ensure world matrices are up to date, then copy
     picCam.updateWorldMatrix(true, false);
     camClone.projectionMatrix.copy(picCam.projectionMatrix);
     camClone.matrix.copy(picCam.matrix);
     camClone.matrixWorld.copy(picCam.matrixWorld);
     camClone.quaternion.copy(picCam.getWorldQuaternion(new THREE.Quaternion()));
     camClone.position.copy(picCam.getWorldPosition(new THREE.Vector3()));
-
-    // If perspective, fix aspect for output
     if (camClone.isPerspectiveCamera) {
-      const prevAspect = camClone.aspect;
       camClone.aspect = targetAspect;
       camClone.updateProjectionMatrix();
-      camClone._prevAspectForRestore = prevAspect;
     }
 
-    // Create an offscreen renderer with its own canvas
+    // Offscreen renderer
     const offCanvas = document.createElement('canvas');
     const offRend = new THREE.WebGLRenderer({
       canvas: offCanvas,
@@ -202,7 +222,7 @@ AFRAME.registerComponent('picture-camera-capture', {
       preserveDrawingBuffer: true
     });
 
-    // Try to mirror key tone/lighting settings from main renderer for color parity
+    // Try to mirror main renderer's tone/color/shadows for parity
     if (mainRend) {
       try { offRend.outputEncoding      = mainRend.outputEncoding; } catch {}
       try { offRend.toneMapping         = mainRend.toneMapping; } catch {}
@@ -214,16 +234,17 @@ AFRAME.registerComponent('picture-camera-capture', {
 
     offRend.setPixelRatio(1);
     offRend.setSize(w, h, false);
-
-    // Render once with the cloned camera
     offRend.render(threeScene, camClone);
 
-    // Download the canvas
+    // Download the PNG
     const dataUrl = offCanvas.toDataURL('image/png');
     const name = `picture-${w}x${h}-` + new Date().toISOString().replace(/[:.]/g,'-') + '.png';
     const a = document.createElement('a');
     a.href = dataUrl; a.download = name;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
+
+    // Play shutter click
+    this._playClick();
 
     // Cleanup
     offRend.dispose();
