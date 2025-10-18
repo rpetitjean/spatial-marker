@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>spatial-marker demo</title>
+    <meta name="description" content="A demo of the Spatial-Marker component">
+    
+    <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+    <script src="spatial-marker.js"></script>
+
+    <script src="https://unpkg.com/aframe-environment-component@1.5.x/dist/aframe-environment-component.min.js"></script>
+    <script src="https://unpkg.com/aframe-vertical-billboard-component"></script>
+
+  </head>
+  
+
+  <body>
+
+    <a-scene light="defaultLightsEnabled: false">
+
+      <a-assets>
+    <a-asset-item id="env" src="/assets/env-photographs.glb"></a-asset-item>
+    <a-asset-item id="camera-glb" src="/assets/Camera.glb"></a-asset-item>
+  </a-assets>
+
+          <!-- PC & VR Rig -->
+<a-entity id="rig" spatial-marker="" wasd-controls="acceleration: 20" painting-area-controller="" paint-tool-reset="" rotation="0 50 0" position="5.84296 0 -4.071428024999476">
+      <a-box camera="far: 700; fov: 75; near: 0.1; active: true" position="0 1.7 0" visible="false" ></a-box>
+      <a-entity id="left-hand" meta-touch-controls="" thumbstick-controls="" button-colorizer="enabled: false"></a-entity>
+      <a-entity id="right-hand" meta-touch-controls="hand: right" thumbstick-controls="" draw-line="color: #f2f23a; thickness: 0.0025" active-brush="" button-colorizer="enabled: false"></a-entity>
+</a-entity>
+
+ <!-- Sky -->
+ <a-sky radius="200" theta-length="110" class="environment" material="shader: skyshader; sunPosition: -0.10389385923870163 0.9444896294427422 0.31168157771610494" visible="" geometry=""></a-sky>
+
+  <!-- Lights -->
+<a-entity light="intensity: 1.884; castShadow: true; shadowBias: -0.0002; shadowCameraFov: 0; shadowCameraTop: 4.43; shadowCameraBottom: -9.41; shadowCameraLeft: -11.33" position="-4.61851 7.79956 -7.02856" data-aframe-default-light="" aframe-injected=""></a-entity>
+<a-entity light="intensity: 1.43; type: ambient"></a-entity>
+<a-entity light="intensity: 1.14" position="-0.5 1 1" data-aframe-default-light="" aframe-injected=""></a-entity>
+
+  <!-- Scene Environement -->
+<a-entity gltf-model="/assets/env-photographs.glb" rotation="0 -90 0" position="0 0 -12.09807" shadow="" class="drawingArea"></a-entity>
+<a-entity geometry="primitive: circle; segments: 64" rotation="-90 0 0" scale="20 20 20" material="" position="0 -0.40502 0" id="base"></a-entity>
+    
+     <!-- Instructions -->
+<a-entity text__instructions="align: center; letterSpacing: 0.33; lineHeight: 35; opacity: 0.5; tabSize: 0.59; value: Take a picture by pressing B &amp; Y simultaneously ; width: 3.1; wrapCount: 21.05" position="-3.70413 1.86937 -8.23171" rotation="0 90 0" id="instructions"></a-entity>
+
+  <!-- Picture Camera element -->
+<a-entity id="picture-camera" camera="active: false; spectator: true; zoom: 1.28" position="0 2.21779 -3.78429" rotation="-12 0 0">
+ <a-entity gltf-model="/assets/Camera.glb" position="0 0.00385 0.24798" scale="0.1 0.1 0.1"></a-entity>
+</a-entity>
+
+
+</a-scene>
+
+
+<script>
+AFRAME.registerComponent('picture-camera-capture', {
+  schema: {
+    leftHand:   {default: '#left-hand'},
+    rightHand:  {default: '#right-hand'},
+    pictureCam: {default: '#picture-camera'}
+  },
+
+  init() {
+    const scene = this.el.sceneEl;
+    // Ensure screenshot component exists (no attributes needed)
+    if (!scene.components.screenshot) scene.setAttribute('screenshot', '');
+
+    this.left  = document.querySelector(this.data.leftHand);
+    this.right = document.querySelector(this.data.rightHand);
+    this.pic   = document.querySelector(this.data.pictureCam);
+
+    this.state = { y:false, b:false, lock:false, timeout:null };
+
+    if (!this.left || !this.right || !this.pic) {
+      console.warn('[picture-camera-capture] Missing left/right/picture camera entity.');
+      return;
+    }
+
+    // Listen to Meta Touch button events
+    this._onYDown = () => { this.state.y = true;  this._maybeSnap(); };
+    this._onYUp   = () => { this.state.y = false; this._clearWindow(); };
+    this._onBDown = () => { this.state.b = true;  this._maybeSnap(); };
+    this._onBUp   = () => { this.state.b = false; this._clearWindow(); };
+
+    this.left.addEventListener('ybuttondown', this._onYDown);
+    this.left.addEventListener('ybuttonup',   this._onYUp);
+    this.right.addEventListener('bbuttondown', this._onBDown);
+    this.right.addEventListener('bbuttonup',   this._onBUp);
+
+    // Small simultaneity window (ms) to avoid accidental double triggers
+    this.windowMs = 400;
+  },
+
+  remove() {
+    if (!this.left || !this.right) return;
+    this.left.removeEventListener('ybuttondown', this._onYDown);
+    this.left.removeEventListener('ybuttonup',   this._onYUp);
+    this.right.removeEventListener('bbuttondown', this._onBDown);
+    this.right.removeEventListener('bbuttonup',   this._onBUp);
+  },
+
+  _clearWindow() {
+    if (this.state.timeout) {
+      clearTimeout(this.state.timeout);
+      this.state.timeout = null;
+    }
+  },
+
+  _maybeSnap() {
+    if (this.state.lock) return; // debounce
+    // Start a small window so Y then B (or B then Y) counts as simultaneous
+    if (!this.state.timeout) {
+      this.state.timeout = setTimeout(() => {
+        this.state.timeout = null;
+        this.state.y = this.state.y && false; // window expired
+        this.state.b = this.state.b && false;
+      }, this.windowMs);
+    }
+    if (this.state.y && this.state.b) {
+      this.state.lock = true;
+      this._captureFromPictureCam().finally(() => {
+        this.state.lock = false;
+        this._clearWindow();
+      });
+    }
+  },
+
+  async _captureFromPictureCam() {
+    const scene = this.el.sceneEl;
+    const pictureCamEl = this.pic;
+    const screenshot = scene.components.screenshot || scene.setAttribute('screenshot', '');
+
+    // Remember current active camera
+    const prevActiveEl = scene.camera && scene.camera.el ? scene.camera.el : null;
+    const needSwitch = !prevActiveEl || prevActiveEl !== pictureCamEl;
+
+    try {
+      // Switch to picture-camera as active (instant, then we render & grab)
+      if (needSwitch) {
+        if (prevActiveEl) prevActiveEl.setAttribute('camera', 'active: false');
+        pictureCamEl.setAttribute('camera', 'active: true');
+        // Force one render pass before capture (reduces chance of blank frames)
+        scene.render();
+      }
+
+      // Use A-Frame's screenshot pipeline to get a canvas
+      const canvas = scene.components.screenshot.getCanvas('perspective');
+      // Name file with timestamp
+      const name = 'picture-' + new Date().toISOString().replace(/[:.]/g, '-') + '.png';
+
+      // Download
+      const link = document.createElement('a');
+      link.href = canvas.toDataURL('image/png');
+      link.download = name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      console.warn('[picture-camera-capture] Capture failed:', e);
+    } finally {
+      // Restore previous camera
+      if (needSwitch && prevActiveEl) {
+        pictureCamEl.setAttribute('camera', 'active: false');
+        prevActiveEl.setAttribute('camera', 'active: true');
+        scene.render();
+      }
+    }
+  }
+});
+</script>
+
+  </body>
+</html>
