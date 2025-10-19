@@ -19,13 +19,13 @@
     <a-scene light="defaultLightsEnabled: false">
 
   <a-assets>
-    <a-asset-item id="env" src="/assets/env-photographs.glb"></a-asset-item>
-    <a-asset-item id="camera-glb" src="/assets/Camera.glb"></a-asset-item>
-   <audio id="click" src="/assets/camera.mp3" preload="auto"></audio>
+    <a-asset-item id="env" src="assets/env-photographs.glb"></a-asset-item>
+    <a-asset-item id="camera-glb" src="assets/Camera.glb"></a-asset-item>
+   <audio id="click" src="assets/camera.mp3" preload="auto"></audio>
   </a-assets>
 
           <!-- PC & VR Rig -->
-<a-entity id="rig" spatial-marker="" rotation="0 50 0" position="5.84296 0 -4.071428024999476"  
+<a-entity id="rig" spatial-marker="" rotation="0 0 0" position=""  
 picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#picture-camera; hotkeys: KeyP,KeyS; enableDblClick: true; pxWidth:2000; aspect:4:3">
       <a-box camera="far: 700; fov: 75; near: 0.1; active: true" position="0 1.7 0" visible="false" ></a-box>
       <a-entity id="left-hand" meta-touch-controls="" ></a-entity>
