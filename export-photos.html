@@ -25,11 +25,11 @@
   </a-assets>
 
           <!-- PC & VR Rig -->
-<a-entity id="rig" spatial-marker="" wasd-controls="acceleration: 20" rotation="0 50 0" position="5.84296 0 -4.071428024999476"  
+<a-entity id="rig" spatial-marker="" rotation="0 50 0" position="5.84296 0 -4.071428024999476"  
 picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#picture-camera; hotkeys: KeyP,KeyS; enableDblClick: true; pxWidth:2000; aspect:4:3">
       <a-box camera="far: 700; fov: 75; near: 0.1; active: true" position="0 1.7 0" visible="false" ></a-box>
-      <a-entity id="left-hand" meta-touch-controls="" thumbstick-controls="" button-colorizer="enabled: false"></a-entity>
-      <a-entity id="right-hand" meta-touch-controls="hand: right" thumbstick-controls="" draw-line="color: #f2f23a; thickness: 0.0025" active-brush="" button-colorizer="enabled: false"></a-entity>
+      <a-entity id="left-hand" meta-touch-controls="" ></a-entity>
+      <a-entity id="right-hand" meta-touch-controls="hand: right"></a-entity>
 </a-entity>
 
  <!-- Sky -->
@@ -41,7 +41,7 @@ picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#
 <a-entity light="intensity: 1.14" position="-0.5 1 1" data-aframe-default-light="" aframe-injected=""></a-entity>
 
   <!-- Scene Environement -->
-<a-entity gltf-model="/assets/env-photographs.glb" rotation="0 -90 0" position="0 0 -12.09807" shadow="" class="drawingArea"></a-entity>
+<a-entity gltf-model="#env" rotation="0 -90 0" position="0 0 -12.09807" shadow="" class="drawingArea"></a-entity>
 <a-entity geometry="primitive: circle; segments: 64" rotation="-90 0 0" scale="20 20 20" material="" position="0 -0.40502 0" id="base"></a-entity>
     
      <!-- Instructions -->
@@ -49,7 +49,7 @@ picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#
 
   <!-- Picture Camera element -->
 <a-entity id="picture-camera" camera="active: false; zoom: 1.28" position="0 2.21779 -3.78429" rotation="-12 0 0">
- <a-entity gltf-model="/assets/Camera.glb" position="0 0.00385 0.24798" scale="0.1 0.1 0.1"></a-entity>
+ <a-entity gltf-model="#camera-glb" position="0 0.00385 0.24798" scale="0.1 0.1 0.1"></a-entity>
 <a-sound src="#click"  ></a-sound>
 </a-entity>
 
