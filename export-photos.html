@@ -36,11 +36,14 @@
 <a-entity id="rig" 
 spatial-marker
 picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#picture-camera; hotkeys: KeyP,KeyS; enableDblClick: true; pxWidth:2000; aspect:4:3"
+movement-controls="constrainToNavMesh: true ; speed : 0.5; controls: gamepad, keyboard; enabled:true"  
 simple-navmesh-constraint="navmesh:.navmesh;fall:0;height:0;exclude:.navmesh-hole;">
-      <a-box camera="far: 700; fov: 75; near: 0.1; active: true" position="0 1.7 0" visible="false" ></a-box>
+      <a-box camera="far: 700; fov: 75; near: 0.1; active: true" position="0 1.7 0" visible="false" nav-agent></a-box>
       <a-entity id="left-hand" meta-touch-controls="" ></a-entity>
       <a-entity id="right-hand" meta-touch-controls="hand: right"></a-entity>
 </a-entity>
+
+
 
  <!-- Sky -->
  <a-sky radius="200" theta-length="110" class="environment" material="shader: skyshader; sunPosition: -0.10389385923870163 0.9444896294427422 0.31168157771610494" visible="" geometry=""></a-sky>
