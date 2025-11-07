@@ -1740,3 +1740,151 @@ AFRAME.registerComponent('dual-grip-exporter', {
     this._toast.setAttribute('visible', !!msg);
   }
 });
+
+
+// 10) SPATIAL-NAVMESH-CONSTRAINT
+// Constrains an entity (e.g. #rig) to one or more navmesh objects.
+// Works with any movement source: thumbstick-controls, wasd-controls, movement-controls, etc.
+AFRAME.registerComponent('spatial-navmesh-constraint', {
+  schema: {
+    navmesh:  { default: '.navmesh' }, // CSS selector for navmesh entities
+    height:   { default: 0 },          // offset above floor (0 for rigs; put eye height on camera child)
+    fall:     { default: 0.5 },        // max allowed vertical drift before snapping back
+    maxStep:  { default: 1.5 },        // how far "up" we raycast from the rig
+    enabled:  { default: true },
+    debug:    { default: false }       // if true, shows a small helper sphere on the floor
+  },
+
+  init () {
+    const THREE = AFRAME.THREE;
+    this.raycaster = new THREE.Raycaster();
+    this.down      = new THREE.Vector3(0, -1, 0);
+
+    this._worldPos = new THREE.Vector3();
+    this._origin   = new THREE.Vector3();
+    this._lastGood = new THREE.Vector3();
+    this._tmp      = new THREE.Vector3();
+
+    this._hasLast  = false;
+    this._navRoots = [];
+    this._needsRefresh = true;
+
+    this._debugEl = null;
+    if (this.data.debug) this._ensureDebugMarker();
+  },
+
+  update (oldData) {
+    if (!oldData || oldData.navmesh !== this.data.navmesh) {
+      this._needsRefresh = true;
+    }
+    if (oldData && oldData.debug !== this.data.debug) {
+      if (this.data.debug) this._ensureDebugMarker();
+      else if (this._debugEl) { this._debugEl.parentNode.removeChild(this._debugEl); this._debugEl = null; }
+    }
+  },
+
+  _refreshNavmesh () {
+    const els = Array.from(document.querySelectorAll(this.data.navmesh));
+    this._navRoots = els
+      .map(el => el && el.object3D)
+      .filter(o => !!o);
+    this._needsRefresh = false;
+    // console.log('[spatial-navmesh-constraint] navmesh roots:', this._navRoots.length);
+  },
+
+  _ensureDebugMarker () {
+    if (this._debugEl || !this.el.sceneEl) return;
+    const d = document.createElement('a-sphere');
+    d.setAttribute('radius', 0.05);
+    d.setAttribute('segments-width', 8);
+    d.setAttribute('segments-height', 8);
+    d.setAttribute('material', 'color:#ff00ff; opacity:0.7; transparent:true');
+    d.setAttribute('visible', false);
+    this.el.sceneEl.appendChild(d);
+    this._debugEl = d;
+  },
+
+  tick () {
+    if (!this.data.enabled) return;
+    const sceneEl = this.el.sceneEl;
+    if (!sceneEl || !sceneEl.hasLoaded) return;
+
+    // Navmesh might appear after GLB load; refresh until we have something real.
+    if (this._needsRefresh || !this._navRoots.length) {
+      this._refreshNavmesh();
+      if (!this._navRoots.length) return; // nothing to constrain to yet
+    }
+
+    const obj = this.el.object3D;
+    obj.getWorldPosition(this._worldPos);
+
+    // Start the ray above the rig so we can go "down" onto the mesh.
+    this._origin.copy(this._worldPos);
+    this._origin.y += this.data.maxStep;
+
+    this.raycaster.set(this._origin, this.down);
+    this.raycaster.far = this.data.maxStep * 2;
+
+    let bestHit = null;
+    let bestDist = Infinity;
+
+    for (let i = 0; i < this._navRoots.length; i++) {
+      const root = this._navRoots[i];
+      if (!root) continue;
+      const hits = this.raycaster.intersectObject(root, true);
+      if (!hits || !hits.length) continue;
+      const h = hits[0];
+      if (h.distance < bestDist) {
+        bestDist = h.distance;
+        bestHit  = h;
+      }
+    }
+
+    if (!bestHit) {
+      // No floor under us -> snap back to last valid if we have one.
+      if (this._hasLast) {
+        this._setWorldPos(obj, this._lastGood);
+      }
+      if (this._debugEl) this._debugEl.setAttribute('visible', false);
+      return;
+    }
+
+    const floorY  = bestHit.point.y;
+    const targetY = floorY + this.data.height;
+    const dy      = Math.abs(this._worldPos.y - targetY);
+
+    if (!this._hasLast) {
+      // First valid contact → adopt this height.
+      this._worldPos.y = targetY;
+      this._setWorldPos(obj, this._worldPos);
+      this._lastGood.copy(this._worldPos);
+      this._hasLast = true;
+    } else {
+      // If we "fell" off more than fall, snap back to last stable pos.
+      if (dy > this.data.fall) {
+        this._setWorldPos(obj, this._lastGood);
+      } else {
+        this._worldPos.y = targetY;
+        this._setWorldPos(obj, this._worldPos);
+        this._lastGood.copy(this._worldPos);
+      }
+    }
+
+    if (this._debugEl) {
+      this._debugEl.setAttribute('visible', true);
+      this._debugEl.object3D.position.copy(bestHit.point);
+    }
+  },
+
+  // Set world position while respecting parent transforms.
+  _setWorldPos (obj, worldVec) {
+    const parent = obj.parent;
+    if (!parent) {
+      obj.position.copy(worldVec);
+      return;
+    }
+    this._tmp.copy(worldVec);
+    parent.worldToLocal(this._tmp);
+    obj.position.copy(this._tmp);
+  }
+});

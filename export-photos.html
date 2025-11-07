@@ -12,7 +12,6 @@
     <script src="https://unpkg.com/aframe-vertical-billboard-component"></script>
 
     <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.6.0/dist/aframe-extras.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/AdaRoseCannon/aframe-xr-boilerplate/simple-navmesh-constraint.js"></script>
 
 
   </head>
@@ -31,14 +30,17 @@
 
           <!-- PC & VR Rig -->
 <a-entity id="rig" 
-spatial-marker
-picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#picture-camera; hotkeys: KeyP,KeyS; enableDblClick: true; pxWidth:2000; aspect:4:3" 
-movement-controls="constrainToNavMesh: true; controls: checkpoint, trackpad, keyboard;"
-simple-navmesh-constraint="navmesh:.navmesh; fall:0.5; height:1.7" >
-      <a-box camera="far: 700; fov: 75; near: 0.1; active: true" position="0 1.7 0" visible="false"></a-box>
-      <a-entity id="left-hand" meta-touch-controls="" ></a-entity>
-      <a-entity id="right-hand" meta-touch-controls="hand: right"></a-entity>
+  spatial-marker
+  picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#picture-camera; hotkeys: KeyP,KeyS; enableDblClick: true; pxWidth:2000; aspect:4:3"
+
+>
+  <a-box camera="far: 700; fov: 75; near: 0.1; active: true"
+         position="0 1.7 0"
+         visible="false"></a-box>
+  <a-entity id="left-hand"  meta-touch-controls=""></a-entity>
+  <a-entity id="right-hand" meta-touch-controls="hand: right"></a-entity>
 </a-entity>
+
 
 
 
