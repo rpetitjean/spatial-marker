@@ -33,8 +33,9 @@
 <a-entity id="rig" 
 spatial-marker
 picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#picture-camera; hotkeys: KeyP,KeyS; enableDblClick: true; pxWidth:2000; aspect:4:3" 
-  movement-controls="constrainToNavMesh: true ; speed : 0.5; controls:  keyboard; enabled:true"  
-  simple-navmesh-constraint="navmesh:.navmesh;fall:0;height:0;exclude:.navmesh-hole;">
+movement-controls="constrainToNavMesh: true ; speed : 0.5; controls: keyboard; enabled:true"  
+simple-navmesh-constraint="navmesh:.navmesh;fall:0;height:0;exclude:.navmesh-hole;">
+
       <a-box camera="far: 700; fov: 75; near: 0.1; active: true" position="0 1.7 0" visible="false" device-detector="xr: true, mobile: false" ></a-box>
       <a-entity id="left-hand" meta-touch-controls="" ></a-entity>
       <a-entity id="right-hand" meta-touch-controls="hand: right"></a-entity>
