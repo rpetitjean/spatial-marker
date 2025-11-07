@@ -32,13 +32,12 @@
 <a-entity id="rig" 
   spatial-marker
   picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#picture-camera; hotkeys: KeyP,KeyS; enableDblClick: true; pxWidth:2000; aspect:4:3"
-  wasd-controls="acceleration: 200"
-  spatial-navmesh-constraint="navmesh:.navmesh; height:0; fall:0.5; maxStep:2; debug:true">
+  wasd-controls="acceleration: 200">
   <a-box camera="far: 700; fov: 75; near: 0.1; active: true"
          position="0 1.7 0"
          visible="false"></a-box>
   <a-entity id="left-hand"  meta-touch-controls=""></a-entity>
-  <a-entity id="right-hand" meta-touch-controls="hand: right"></a-entity>
+  <a-entity id="right-hand" meta-touch-controls="hand: right"  spatial-navmesh-constraint="rig:#rig; navmesh:.navmesh; height:0; fall:0.5; maxStep:2; debug:true"></a-entity>
 </a-entity>
 
  <!-- Sky -->

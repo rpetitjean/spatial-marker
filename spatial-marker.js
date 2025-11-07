@@ -1742,66 +1742,68 @@ AFRAME.registerComponent('dual-grip-exporter', {
 });
 
 
-// 10) SPATIAL-NAVMESH-CONSTRAINT
-// Constrains an entity (e.g. #rig) to one or more navmesh objects.
-// Works with any movement source: thumbstick-controls, wasd-controls, movement-controls, etc.
+// SPATIAL-NAVMESH-CONSTRAINT (hand-hosted, constrains a rig)
 AFRAME.registerComponent('spatial-navmesh-constraint', {
   schema: {
-    navmesh:  { default: '.navmesh' }, // CSS selector for navmesh entities
-    height:   { default: 0 },          // offset above floor (0 for rigs; put eye height on camera child)
-    fall:     { default: 0.5 },        // max allowed vertical drift before snapping back
-    maxStep:  { default: 1.5 },        // how far "up" we raycast from the rig
+    rig:      { default: '#rig' },    // which entity to constrain
+    navmesh:  { default: '.navmesh' },// CSS selector for navmesh entities
+    height:   { default: 0 },         // 0 for rig at floor; put 1.7 on camera child
+    fall:     { default: 0.5 },
+    maxStep:  { default: 2.0 },
     enabled:  { default: true },
-    debug:    { default: false }       // if true, shows a small helper sphere on the floor
+    debug:    { default: false }
   },
 
   init () {
     const THREE = AFRAME.THREE;
     this.raycaster = new THREE.Raycaster();
     this.down      = new THREE.Vector3(0, -1, 0);
-
     this._worldPos = new THREE.Vector3();
     this._origin   = new THREE.Vector3();
     this._lastGood = new THREE.Vector3();
     this._tmp      = new THREE.Vector3();
 
-    this._hasLast  = false;
-    this._navRoots = [];
+    this._rigEl        = null;
+    this._navRoots     = [];
     this._needsRefresh = true;
+    this._hasLast      = false;
 
-    this._debugEl = null;
-    if (this.data.debug) this._ensureDebugMarker();
+    this._debugMarker  = null;
+    if (this.data.debug) this._makeDebugMarker();
   },
 
   update (oldData) {
-    if (!oldData || oldData.navmesh !== this.data.navmesh) {
-      this._needsRefresh = true;
-    }
+    // (re)resolve rig entity
+    this._rigEl = document.querySelector(this.data.rig) || null;
+    this._needsRefresh = true;
+
     if (oldData && oldData.debug !== this.data.debug) {
-      if (this.data.debug) this._ensureDebugMarker();
-      else if (this._debugEl) { this._debugEl.parentNode.removeChild(this._debugEl); this._debugEl = null; }
+      if (this.data.debug) this._makeDebugMarker();
+      else if (this._debugMarker) {
+        this._debugMarker.parentNode.removeChild(this._debugMarker);
+        this._debugMarker = null;
+      }
     }
+  },
+
+  _makeDebugMarker () {
+    if (!this.el.sceneEl || this._debugMarker) return;
+    const s = document.createElement('a-sphere');
+    s.setAttribute('radius', 0.06);
+    s.setAttribute('segments-width', 8);
+    s.setAttribute('segments-height', 8);
+    s.setAttribute('material', 'color:#ff00ff; opacity:0.7; transparent:true');
+    s.setAttribute('visible', false);
+    this.el.sceneEl.appendChild(s);
+    this._debugMarker = s;
   },
 
   _refreshNavmesh () {
     const els = Array.from(document.querySelectorAll(this.data.navmesh));
     this._navRoots = els
       .map(el => el && el.object3D)
-      .filter(o => !!o);
+      .filter(Boolean);
     this._needsRefresh = false;
-    // console.log('[spatial-navmesh-constraint] navmesh roots:', this._navRoots.length);
-  },
-
-  _ensureDebugMarker () {
-    if (this._debugEl || !this.el.sceneEl) return;
-    const d = document.createElement('a-sphere');
-    d.setAttribute('radius', 0.05);
-    d.setAttribute('segments-width', 8);
-    d.setAttribute('segments-height', 8);
-    d.setAttribute('material', 'color:#ff00ff; opacity:0.7; transparent:true');
-    d.setAttribute('visible', false);
-    this.el.sceneEl.appendChild(d);
-    this._debugEl = d;
   },
 
   tick () {
@@ -1809,25 +1811,29 @@ AFRAME.registerComponent('spatial-navmesh-constraint', {
     const sceneEl = this.el.sceneEl;
     if (!sceneEl || !sceneEl.hasLoaded) return;
 
-    // Navmesh might appear after GLB load; refresh until we have something real.
-    if (this._needsRefresh || !this._navRoots.length) {
-      this._refreshNavmesh();
-      if (!this._navRoots.length) return; // nothing to constrain to yet
+    if (!this._rigEl) {
+      this._rigEl = document.querySelector(this.data.rig) || null;
+      if (!this._rigEl) return;
     }
 
-    const obj = this.el.object3D;
-    obj.getWorldPosition(this._worldPos);
+    // Wait for navmesh to exist (GLB load)
+    if (this._needsRefresh || !this._navRoots.length) {
+      this._refreshNavmesh();
+      if (!this._navRoots.length) return;
+    }
 
-    // Start the ray above the rig so we can go "down" onto the mesh.
+    const rigObj = this._rigEl.object3D;
+    rigObj.getWorldPosition(this._worldPos);
+
+    // Start ray a bit above rig
     this._origin.copy(this._worldPos);
     this._origin.y += this.data.maxStep;
 
-    this.raycaster.set(this._origin, this.down);
+    this.raycaster.set(this._origin, new AFRAME.THREE.Vector3(0, -1, 0));
     this.raycaster.far = this.data.maxStep * 2;
 
     let bestHit = null;
     let bestDist = Infinity;
-
     for (let i = 0; i < this._navRoots.length; i++) {
       const root = this._navRoots[i];
       if (!root) continue;
@@ -1841,11 +1847,8 @@ AFRAME.registerComponent('spatial-navmesh-constraint', {
     }
 
     if (!bestHit) {
-      // No floor under us -> snap back to last valid if we have one.
-      if (this._hasLast) {
-        this._setWorldPos(obj, this._lastGood);
-      }
-      if (this._debugEl) this._debugEl.setAttribute('visible', false);
+      if (this._hasLast) this._setWorldPos(rigObj, this._lastGood);
+      if (this._debugMarker) this._debugMarker.setAttribute('visible', false);
       return;
     }
 
@@ -1854,29 +1857,26 @@ AFRAME.registerComponent('spatial-navmesh-constraint', {
     const dy      = Math.abs(this._worldPos.y - targetY);
 
     if (!this._hasLast) {
-      // First valid contact → adopt this height.
       this._worldPos.y = targetY;
-      this._setWorldPos(obj, this._worldPos);
+      this._setWorldPos(rigObj, this._worldPos);
       this._lastGood.copy(this._worldPos);
       this._hasLast = true;
     } else {
-      // If we "fell" off more than fall, snap back to last stable pos.
       if (dy > this.data.fall) {
-        this._setWorldPos(obj, this._lastGood);
+        this._setWorldPos(rigObj, this._lastGood);
       } else {
         this._worldPos.y = targetY;
-        this._setWorldPos(obj, this._worldPos);
+        this._setWorldPos(rigObj, this._worldPos);
         this._lastGood.copy(this._worldPos);
       }
     }
 
-    if (this._debugEl) {
-      this._debugEl.setAttribute('visible', true);
-      this._debugEl.object3D.position.copy(bestHit.point);
+    if (this._debugMarker) {
+      this._debugMarker.setAttribute('visible', true);
+      this._debugMarker.object3D.position.copy(bestHit.point);
     }
   },
 
-  // Set world position while respecting parent transforms.
   _setWorldPos (obj, worldVec) {
     const parent = obj.parent;
     if (!parent) {
@@ -1888,3 +1888,4 @@ AFRAME.registerComponent('spatial-navmesh-constraint', {
     obj.position.copy(this._tmp);
   }
 });
+
