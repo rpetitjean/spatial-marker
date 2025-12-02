@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>spatial-marker demo</title>
+    <meta name="description" content="A demo of the Spatial-Marker component">
+    
+    <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+    <script src="https://rpetitjean.github.io/spatial-marker/spatial-marker.js"></script>
+
+    <script src="https://unpkg.com/aframe-environment-component@1.5.x/dist/aframe-environment-component.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.6.0/dist/aframe-extras.min.js"></script>
+ <script src="https://cdn.jsdelivr.net/gh/AdaRoseCannon/aframe-xr-boilerplate/simple-navmesh-constraint.js"></script>
+
+
+
+  </head>
+  
+
+  <body>
+
+    <a-scene light="defaultLightsEnabled: false">
+
+  <a-assets>
+    <a-asset-item id="env" src="assets/env-photographs.glb"></a-asset-item>
+     <a-asset-item id="navmesh" src="assets/navmesh.glb"></a-asset-item>
+    <a-asset-item id="camera-glb" src="assets/Camera.glb"></a-asset-item>
+   <audio id="click" src="assets/camera.mp3" preload="auto"></audio>
+  </a-assets>
+
+          <!-- PC & VR Rig -->
+<a-entity id="rig" 
+spatial-marker
+picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#picture-camera; hotkeys: KeyP,KeyS; enableDblClick: true; pxWidth:2000; aspect:4:3" 
+movement-controls="constrainToNavMesh: true ; speed : 0.5; controls: keyboard; enabled:true"  
+simple-navmesh-constraint="navmesh:.navmesh;fall:0;height:0;exclude:.navmesh-hole;">
+
+      <a-box camera="far: 700; fov: 75; near: 0.1; active: true" position="0 1.7 0" visible="false" device-detector="xr: true, mobile: false" ></a-box>
+      <a-entity id="left-hand" meta-touch-controls="" ></a-entity>
+      <a-entity id="right-hand" meta-touch-controls="hand: right"></a-entity>
+</a-entity>
+
+ <!-- Sky -->
+ <a-sky radius="200" theta-length="110" class="environment" material="shader: skyshader; sunPosition: -0.10389385923870163 0.9444896294427422 0.31168157771610494" visible="" geometry=""></a-sky>
+
+  <!-- Lights -->
+<a-entity light="intensity: 1.884; castShadow: true; shadowBias: -0.0002; shadowCameraFov: 0; shadowCameraTop: 4.43; shadowCameraBottom: -9.41; shadowCameraLeft: -11.33" position="-4.61851 7.79956 -7.02856" data-aframe-default-light="" aframe-injected=""></a-entity>
+<a-entity light="intensity: 1.43; type: ambient"></a-entity>
+<a-entity light="intensity: 1.14" position="-0.5 1 1" data-aframe-default-light="" aframe-injected=""></a-entity>
+
+  <!-- Scene Environement -->
+<a-entity gltf-model="#env" rotation="0 -90 0" position="0 0 -12.09807" shadow="" class="drawingArea"></a-entity>
+<a-entity gltf-model="#navmesh" rotation="0 -90 0" position="0 0 -12.09807" visible="false" class="navmesh"></a-entity>
+<a-entity geometry="primitive: circle; segments: 64" rotation="-90 0 0" scale="20 20 20" material="" position="0 -0.40502 0" id="base"></a-entity>
+    
+     <!-- Instructions -->
+<a-entity text__instructions="align: center; letterSpacing: 0.33; lineHeight: 35; opacity: 0.5; tabSize: 0.59; value: Take a picture by pressing B &amp; Y simultaneously ; width: 3.1; wrapCount: 21.05" position="-3.70413 1.86937 -8.23171" rotation="0 90 0" id="instructions"></a-entity>
+
+  <!-- Picture Camera element -->
+<a-entity id="picture-camera" camera="active: false; zoom: 1.28" position="0 2.21779 -3.78429" rotation="-12 0 0">
+ <a-entity gltf-model="#camera-glb" position="0 0.00385 0.24798" scale="0.1 0.1 0.1"></a-entity>
+<a-sound src="#click"  ></a-sound>
+</a-entity>
+
+
+</a-scene>
+
+<script>
+AFRAME.registerComponent('picture-camera-capture', {
+  schema: {
+    // VR inputs
+    leftHand:   {default: '#left-hand'},
+    rightHand:  {default: '#right-hand'},
+    pictureCam: {default: '#picture-camera'},
+
+    // Desktop triggers
+    hotkeys:           {default: 'KeyP,KeyS'}, // KeyboardEvent.code values
+    enableDblClick:    {default: true},
+    hotkeysWhenTyping: {default: false},
+
+    // Output sizing (pixels)
+    pxWidth:  {default: 1600}, // 0 = auto from height & aspect
+    pxHeight: {default: 0},    // 0 = auto from width & aspect
+    aspect:   {default: '4:3'},// e.g. "16:9", "1:1", "4:3" or number like "1.7777"
+
+    // Sound
+    enableSound:  {default: true},
+    soundSelector:{default: 'a-sound,[sound]'} // searched inside pictureCam
+  },
+
+  init() {
+    const scene = this.el.sceneEl;
+    if (!scene.components.screenshot) scene.setAttribute('screenshot', '');
+
+    // Cache entities
+    this.left  = document.querySelector(this.data.leftHand);
+    this.right = document.querySelector(this.data.rightHand);
+    this.pic   = document.querySelector(this.data.pictureCam);
+
+    // Find a-sound inside the picture camera (or the camera itself if it has [sound])
+    this.soundEl = null;
+    if (this.pic) {
+      this.soundEl = this.pic.querySelector(this.data.soundSelector) ||
+                     (this.pic.components && this.pic.components.sound ? this.pic : null);
+    }
+
+    this.state = { y:false, b:false, lock:false, timeout:null };
+    this.windowMs = 400;
+
+    // VR buttons (Y on left + B on right)
+    if (this.left && this.right && this.pic) {
+      this._onYDown = () => { this.state.y = true;  this._maybeSnap(); };
+      this._onYUp   = () => { this.state.y = false; this._clearWindow(); };
+      this._onBDown = () => { this.state.b = true;  this._maybeSnap(); };
+      this._onBUp   = () => { this.state.b = false; this._clearWindow(); };
+
+      this.left.addEventListener('ybuttondown', this._onYDown);
+      this.left.addEventListener('ybuttonup',   this._onYUp);
+      this.right.addEventListener('bbuttondown', this._onBDown);
+      this.right.addEventListener('bbuttonup',   this._onBUp);
+    } else {
+      console.warn('[picture-camera-capture] Missing left/right/picture camera entity.');
+    }
+
+    // Desktop hotkeys / double-click
+    this._hotkeySet = new Set(this.data.hotkeys.split(',').map(s=>s.trim()).filter(Boolean));
+    this._onKeyDown = (e)=>{
+      if (!this.data.hotkeysWhenTyping) {
+        const t = e.target;
+        if (t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.isContentEditable)) return;
+      }
+      if (this._hotkeySet.has(e.code)) { e.preventDefault(); this._snapNow(); }
+    };
+    this._onDblClick = ()=>{ if (this.data.enableDblClick) this._snapNow(); };
+
+    window.addEventListener('keydown', this._onKeyDown);
+    if (this.data.enableDblClick) window.addEventListener('dblclick', this._onDblClick);
+  },
+
+  remove() {
+    if (this.left && this.right) {
+      this.left.removeEventListener('ybuttondown', this._onYDown);
+      this.left.removeEventListener('ybuttonup',   this._onYUp);
+      this.right.removeEventListener('bbuttondown', this._onBDown);
+      this.right.removeEventListener('bbuttonup',   this._onBUp);
+    }
+    window.removeEventListener('keydown', this._onKeyDown);
+    window.removeEventListener('dblclick', this._onDblClick);
+  },
+
+  // --- helpers ---
+  _clearWindow(){ if (this.state.timeout){ clearTimeout(this.state.timeout); this.state.timeout=null; } },
+  _maybeSnap(){
+    if (this.state.lock) return;
+    if (!this.state.timeout){
+      this.state.timeout=setTimeout(()=>{ this.state.timeout=null; this.state.y=false; this.state.b=false; }, this.windowMs);
+    }
+    if (this.state.y && this.state.b) this._snapNow();
+  },
+  _snapNow(){
+    if (this.state.lock) return;
+    this.state.lock = true;
+    this._captureOffscreen().finally(()=>{ this.state.lock=false; this._clearWindow(); });
+  },
+
+  _parseAspect(){
+    const a = (this.data.aspect||'4:3').toString().trim();
+    if (a.includes(':')) { const [w,h]=a.split(':').map(Number); if (w>0 && h>0) return w/h; }
+    const n = parseFloat(a); if (isFinite(n) && n>0) return n;
+    return 4/3;
+  },
+  _computeSize(){
+    const ar = this._parseAspect();
+    let w = Math.max(0, Math.floor(this.data.pxWidth||0));
+    let h = Math.max(0, Math.floor(this.data.pxHeight||0));
+    if (w && !h) h = Math.max(1, Math.round(w / ar));
+    if (!w && h) w = Math.max(1, Math.round(h * ar));
+    if (!w && !h) { w = 1600; h = Math.round(w / ar); }
+    return {w,h, ar};
+  },
+
+  _playClick(){
+    if (!this.data.enableSound || !this.soundEl) return;
+    const comp = this.soundEl.components && this.soundEl.components.sound;
+    if (!comp) return;
+    try {
+      if (comp.isPlaying) comp.stopSound();
+      comp.playSound();
+    } catch(e){
+      // ignore sound policy errors silently
+    }
+  },
+
+  // Offscreen render (no stretching, no XR flicker)
+  async _captureOffscreen(){
+    const sceneEl = this.el.sceneEl;
+    const threeScene = sceneEl.object3D;
+    const mainRend   = sceneEl.renderer;
+    const picEl      = this.pic;
+    if (!picEl) { console.warn('[picture-camera-capture] No pictureCam entity'); return; }
+
+    const picCam = picEl.getObject3D('camera');
+    if (!picCam || !picCam.isCamera) {
+      console.warn('[picture-camera-capture] pictureCam has no THREE.Camera yet');
+      return;
+    }
+
+    const {w,h} = this._computeSize();
+    const targetAspect = w / h;
+
+    // Clone camera so we don't mutate live one
+    const camClone = picCam.clone();
+    camClone.matrixAutoUpdate = false;
+    picCam.updateWorldMatrix(true, false);
+    camClone.projectionMatrix.copy(picCam.projectionMatrix);
+    camClone.matrix.copy(picCam.matrix);
+    camClone.matrixWorld.copy(picCam.matrixWorld);
+    camClone.quaternion.copy(picCam.getWorldQuaternion(new THREE.Quaternion()));
+    camClone.position.copy(picCam.getWorldPosition(new THREE.Vector3()));
+    if (camClone.isPerspectiveCamera) {
+      camClone.aspect = targetAspect;
+      camClone.updateProjectionMatrix();
+    }
+
+    // Offscreen renderer
+    const offCanvas = document.createElement('canvas');
+    const offRend = new THREE.WebGLRenderer({
+      canvas: offCanvas,
+      antialias: true,
+      alpha: false,
+      preserveDrawingBuffer: true
+    });
+
+    // Try to mirror main renderer's tone/color/shadows for parity
+    if (mainRend) {
+      try { offRend.outputEncoding      = mainRend.outputEncoding; } catch {}
+      try { offRend.toneMapping         = mainRend.toneMapping; } catch {}
+      try { offRend.toneMappingExposure = mainRend.toneMappingExposure; } catch {}
+      try { offRend.physicallyCorrectLights = mainRend.physicallyCorrectLights; } catch {}
+      try { offRend.shadowMap.enabled   = mainRend.shadowMap.enabled; } catch {}
+      try { offRend.shadowMap.type      = mainRend.shadowMap.type; } catch {}
+    }
+
+    offRend.setPixelRatio(1);
+    offRend.setSize(w, h, false);
+    offRend.render(threeScene, camClone);
+
+    // Download the PNG
+    const dataUrl = offCanvas.toDataURL('image/png');
+    const name = `picture-${w}x${h}-` + new Date().toISOString().replace(/[:.]/g,'-') + '.png';
+    const a = document.createElement('a');
+    a.href = dataUrl; a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+
+    // Play shutter click
+    this._playClick();
+
+    // Cleanup
+    offRend.dispose();
+  }
+});
+</script>
+
+  </body>
+</html>

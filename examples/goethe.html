@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>goethe</title>
+    <meta name="description" content="A demo of the Spatial-Marker component">
+    
+    <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+    <script src="https://rpetitjean.github.io/spatial-marker/spatial-marker.js"></script>
+    <script src="animated-shader.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.6.0/dist/aframe-extras.min.js"></script>
+ <script src="https://cdn.jsdelivr.net/gh/AdaRoseCannon/aframe-xr-boilerplate/simple-navmesh-constraint.js"></script>
+    <script src="https://unpkg.com/aframe-environment-component@1.5.x/dist/aframe-environment-component.min.js"></script>
+
+<script src="https://unpkg.com/aframe-event-set-component@^5.0.0/dist/aframe-event-set-component.min.js"></script>
+
+  </head>
+  
+
+
+  <body>
+
+    <a-scene light="defaultLightsEnabled: false" background="color: #ffffff" renderer="colorManagement: true; physicallyCorrectLights: true"   goethe-zones="rig: #rig">
+
+  <a-assets>
+    <a-asset-item id="env" src="assets/goethe-colors/env-goethe.glb"></a-asset-item>
+   <a-asset-item id="navmesh" src="assets/goethe-colors/navmesh-env.glb"></a-asset-item>
+   <a-asset-item id="table" src="assets/goethe-colors/table.glb"></a-asset-item>
+   <img id="diagram" src="assets/goethe-colors/upscale-diagram_png512.png">
+   <a-asset-item id="goethe" src="assets/goethe-colors/goethe.glb"></a-asset-item>
+    
+     <a-asset-item id="navmesh-blue" src="assets/goethe-colors/navmesh-blue.glb"></a-asset-item>
+     <a-asset-item id="navmesh-green" src="assets/goethe-colors/navmesh-green.glb"></a-asset-item>
+     <a-asset-item id="navmesh-indigo" src="assets/goethe-colors/navmesh-indigo.glb"></a-asset-item>
+     <a-asset-item id="navmesh-orange" src="assets/goethe-colors/navmesh-orange.glb"></a-asset-item>
+     <a-asset-item id="navmesh-red" src="assets/goethe-colors/navmesh-red.glb"></a-asset-item>
+     <a-asset-item id="navmesh-yellow" src="assets/goethe-colors/navmesh-yellow.glb"></a-asset-item>
+
+     <a-asset-item id="interactable-blue" src="assets/goethe-colors/interactable/interactable-blue.glb"></a-asset-item>
+     <a-asset-item id="interactable-green" src="assets/goethe-colors/interactable/interactable-green.glb"></a-asset-item>
+     <a-asset-item id="interactable-indigo" src="assets/goethe-colors/interactable/interactable-indigo.glb"></a-asset-item>
+     <a-asset-item id="interactable-orange" src="assets/goethe-colors/interactable/interactable-orange.glb"></a-asset-item>
+     <a-asset-item id="interactable-red" src="assets/goethe-colors/interactable/interactable-red.glb"></a-asset-item>
+     <a-asset-item id="interactable-yellow" src="assets/goethe-colors/interactable/interactable-yellow.glb"></a-asset-item>
+
+    <a-asset-item id="eyes" src="assets/goethe-colors/Eyes.glb"></a-asset-item>
+    <a-asset-item id="forest" src="assets/goethe-colors/Forest.glb"></a-asset-item>
+    <a-asset-item id="frame" src="assets/goethe-colors/Frame.glb"></a-asset-item>
+    <a-asset-item id="indigo-element" src="assets/goethe-colors/indigo.glb"></a-asset-item>
+    <a-asset-item id="frame-cube" src="assets/goethe-colors/Frame-cube.glb"></a-asset-item>
+    <a-asset-item id="frame-orange" src="assets/goethe-colors/frame-orange.glb"></a-asset-item>
+
+  </a-assets>
+
+          <!-- PC & VR Rig -->
+<a-entity id="rig" 
+spatial-marker
+movement-controls="constrainToNavMesh: true ; speed : 0.5; controls: keyboard; enabled:true"  
+position="-0.8 0 3.6" rotation="0 -20 0"
+simple-navmesh-constraint="navmesh:.navmesh;fall:0;height:0;exclude:.navmesh-hole; "
+cursor="rayOrigin: mouse"
+         raycaster="objects: .clickable">
+
+      <a-box camera="far: 700; fov: 55; near: 0.1; active: true" position="0 1.7 0" visible="false"  look-controls="pointerLockEnabled: true; touchEnabled: false; mouseEnabled: true; magicWindowTrackingEnabled: false"></a-box>
+      <a-entity id="left-hand" meta-touch-controls="" ></a-entity>
+      <a-entity id="right-hand" meta-touch-controls="hand: right"></a-entity>
+</a-entity>
+
+ <!-- Sky -->
+<a-sky radius="200" theta-length="110" class="environment" material="shader: skyshader; blending: none; anisotropy: 1.04; turbidity: 20; mieCoefficient: 0.1; mieDirectionalG: 0.72; sunPosition: -0.10389385923870163 0.9444896294427422 0.31168157771610494"></a-sky>
+  
+<!-- Lights -->
+
+<a-entity light="intensity: 1; type: ambient"></a-entity>
+<a-entity light="intensity: 1.884; castShadow: true; shadowBias: -0.0002; shadowCameraFov: 0; shadowCameraNear: -2.47; shadowCameraTop: 8.11; shadowCameraRight: 7.68; shadowCameraBottom: -12.3; shadowCameraLeft: -11.9" position="-0.49743 2.96771 1.19041" data-aframe-default-light="" aframe-injected=""></a-entity>
+<a-entity light="intensity: 1.5; type: point" position="0 1.88667 0"></a-entity>
+
+<!-- Scene Environement -->
+<a-entity gltf-model="#env" rotation="0 -90 0" position="0 0 0" shadow=""></a-entity>
+<a-entity gltf-model="#navmesh" rotation="0 -90 0" position="0 0 0" visible="false" class="navmesh"></a-entity>
+
+<!-- Goethe's bust + diagram + table -->  
+<a-entity gltf-model="#goethe" rotation="0 -90 0" position="0 0 0" shadow=""></a-entity>
+<a-entity material="shader: ; transparent: true; src: #diagram; " geometry="primitive: plane" rotation="-90.00021045914971 62.589336582296 0" position="-0.03296 0.81397 0" id="diagram-element" 
+  shimmer-material="opacity: 1; shimmerIntensity: 1.5; shimmerSpeed: 1.0"></a-entity>
+<a-entity gltf-model="#table" rotation="0 -90 0" position="0 0 0" visible="true"></a-entity>
+
+
+     <!-- navmeshs -->
+<a-entity gltf-model="#navmesh-blue" rotation="0 -90 0" position="0 0 0" class="drawingArea navmesh" visible="false"></a-entity>
+<a-entity gltf-model="#navmesh-green" rotation="0 -90 0" position="0 0 0" shadow="" class="drawingArea navmesh" visible="false"></a-entity>
+<a-entity gltf-model="#navmesh-indigo" rotation="0 -90 0" position="0 0 0" shadow="" class="drawingArea navmesh" visible="false"></a-entity>
+<a-entity gltf-model="#navmesh-orange" rotation="0 -90 0" position="0 0 0" shadow="" class="drawingArea navmesh" visible="false"></a-entity>
+<a-entity gltf-model="#navmesh-red" rotation="0 -90 0" position="0 0 0" class="drawingArea navmesh" visible="false"></a-entity>
+<a-entity gltf-model="#navmesh-yellow" rotation="0 -90 0" position="0 0 0" class="drawingArea navmesh" visible="false"></a-entity>
+
+
+  <!-- interactable -->
+<a-entity id="btn-blue" gltf-model="#interactable-blue" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
+<a-entity id="btn-green" gltf-model="#interactable-green" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
+<a-entity id="btn-indigo" gltf-model="#interactable-indigo" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
+<a-entity id="btn-orange" gltf-model="#interactable-orange" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
+<a-entity id="btn-red" gltf-model="#interactable-red" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
+<a-entity id="btn-yellow" gltf-model="#interactable-yellow" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
+
+
+<!-- drawing space elements -->
+<!-- Frame Orange -->
+<a-entity gltf-model="#frame-orange" position="0 1.60188 -6.24755" rotation="0 90.2007456874455 0"></a-entity>
+
+<!-- Frame Blue -->
+<a-entity gltf-model="#frame" position="0 1.60188 5.81842" scale="0.5 0.5 0.5" rotation="0 180 0"></a-entity>
+
+<!-- Frame Red -->
+<a-entity gltf-model="#eyes" position="-5.6716 1.40836 -3.02604" scale="2 2 2" rotation="0 151.31761000000003 0"></a-entity>
+
+<!-- Frame Yellow -->
+<a-entity gltf-model="#frame-cube" position="3.47565 0.01254 -4.42115" scale="0.25 0.18878 0.25" rotation="0 152.75971550659958 0"></a-entity>
+<a-entity gltf-model="#frame-cube" position="4.52671 0.06421 -2.93033" scale="0.25 0.23012 0.25" rotation="0 114.68953480913203 0"></a-entity>
+<a-entity gltf-model="#frame-cube" position="5.45515 0.02306 -1.33622" scale="0.25 0.12743 0.25" rotation="0 152.75971550659958 0"></a-entity>
+
+<!-- Frame Green -->
+<a-entity gltf-model="#forest" rotation="0 -90 0" position="0 0 0"></a-entity>
+
+<!-- Frame Violet -->
+<a-entity gltf-model="#indigo-element" rotation="0 -90 0" position="0 0 0"></a-entity>
+
+</a-scene>
+
+<!-- Shimmer Material -->
+<script>
+AFRAME.registerComponent('shimmer-material', {
+  schema: {
+    opacity:          { type: 'number', default: 1.0 },
+    shimmerIntensity: { type: 'number', default: 1.0 }, // how strong the shimmer is
+    shimmerSpeed:     { type: 'number', default: 1.0 }  // how fast it moves
+  },
+
+  init: function () {
+    this.shaderMaterials = [];
+    this.applyMaterial = this.applyMaterial.bind(this);
+
+    this.el.addEventListener('loaded', this.applyMaterial);
+    this.el.addEventListener('model-loaded', this.applyMaterial);
+    this.el.addEventListener('materialtextureloaded', this.applyMaterial);
+
+    this.applyMaterial();
+  },
+
+  makeShaderMaterial: function (baseMap) {
+    const data = this.data;
+    baseMap.wrapS = baseMap.wrapT = THREE.ClampToEdgeWrapping;
+
+    return new THREE.ShaderMaterial({
+      transparent: true,
+      side: THREE.DoubleSide,
+      uniforms: {
+        time:            { value: 0 },
+        opacity:         { value: data.opacity },
+        shimmerIntensity:{ value: data.shimmerIntensity },
+        shimmerSpeed:    { value: data.shimmerSpeed },
+        baseMap:         { value: baseMap }
+      },
+
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+
+      fragmentShader: `
+        uniform float time;
+        uniform float opacity;
+        uniform float shimmerIntensity;
+        uniform float shimmerSpeed;
+        uniform sampler2D baseMap;
+        varying vec2 vUv;
+
+        // very simple 2D noise
+        float random(vec2 st) {
+          return fract(sin(dot(st, vec2(12.9898,78.233))) * 43758.5453);
+        }
+        float noise(vec2 st) {
+          vec2 i = floor(st);
+          vec2 f = fract(st);
+
+          float a = random(i);
+          float b = random(i + vec2(1.0, 0.0));
+          float c = random(i + vec2(0.0, 1.0));
+          float d = random(i + vec2(1.0, 1.0));
+
+          vec2 u = f * f * (3.0 - 2.0 * f);
+
+          return mix(a, b, u.x) +
+                 (c - a) * u.y * (1.0 - u.x) +
+                 (d - b) * u.x * u.y;
+        }
+
+        void main() {
+          vec4 baseSample = texture2D(baseMap, vUv);
+          if (baseSample.a < 0.01) {
+            discard;
+          }
+
+          // animated noise over the whole plane
+          vec2 st = vUv * 4.0;
+          st += vec2(time * shimmerSpeed * 0.2, -time * shimmerSpeed * 0.17);
+
+          float n = noise(st);        // 0..1
+          n = clamp(n, 0.0, 1.0);
+
+          // brightness deviation around 1.0 (e.g. 0.5..1.5)
+          float amp = 0.5 * shimmerIntensity;
+          float brightness = 1.0 + (n - 0.5) * 2.0 * amp;
+
+          // build a white “boost” so highlights go to white, not grey
+          vec3 whiteBoost = mix(vec3(0.0), vec3(1.0), max(0.0, brightness - 1.0));
+
+          // add white highlight on top of original color
+          vec3 finalRGB = baseSample.rgb + whiteBoost * 0.85;
+          finalRGB = clamp(finalRGB, 0.0, 1.0);
+
+          // slight alpha variation
+          float alphaFactor = 1.0 + (n - 0.5) * 0.4 * shimmerIntensity;
+          float finalA = baseSample.a * opacity * alphaFactor;
+          finalA = clamp(finalA, 0.0, 1.0);
+
+          gl_FragColor = vec4(finalRGB, finalA);
+        }
+      `
+    });
+  },
+
+  applyMaterial: function () {
+    const mesh = this.el.getObject3D('mesh');
+    if (!mesh) return;
+
+    const list = this.shaderMaterials;
+
+    mesh.traverse((node) => {
+      if (!node.isMesh) return;
+      const oldMat = node.material;
+
+      if (Array.isArray(oldMat)) {
+        const newMats = [];
+        for (let i = 0; i < oldMat.length; i++) {
+          const m = oldMat[i];
+          if (!m || !m.map) { newMats.push(m); continue; }
+          const sm = this.makeShaderMaterial(m.map);
+          newMats.push(sm);
+          list.push(sm);
+        }
+        node.material = newMats;
+      } else {
+        if (!oldMat || !oldMat.map) return;
+        const sm = this.makeShaderMaterial(oldMat.map);
+        node.material = sm;
+        list.push(sm);
+      }
+    });
+  },
+
+  tick: function (timeMs) {
+    const t = timeMs / 1000.0;
+    for (let i = 0; i < this.shaderMaterials.length; i++) {
+      const m = this.shaderMaterials[i];
+      if (m.uniforms.time) m.uniforms.time.value = t;
+    }
+  }
+});
+</script>
+
+<!-- Goethe Zones script, react to rig position to set up the colour palette -->
+<script>
+AFRAME.registerComponent('goethe-zones', {
+  schema: {
+    rig: {type: 'selector', default: '#rig'}
+  },
+
+  init: function () {
+    // the rig (where spatial-marker is)
+    this.rig = this.data.rig || document.querySelector('#rig');
+    this.currentZone = null;
+    this._rigPos = new THREE.Vector3();
+
+    // Define your 24-color palettes here
+    // (put whatever 24 hex colors you want for each main color)
+this.palettes = {
+  blue: [
+        '#081427','#3572ee','#0b1a33','#3a7aff',
+        '#0f2244','#4584ff','#132a55','#4f8eff',
+        '#163266','#5998ff','#193a77','#63a2ff',
+        '#1d4288','#6dacff','#214a99','#77b6ff',
+        '#2552aa','#81c0ff','#295abb','#8bcaFF',
+        '#2d62cc','#95d4ff','#316add','#9fdeff'
+  ],
+  green: [
+        '#06210f','#36ca63','#0a2f16','#3ad86a',
+        '#0e3d1d','#3fe672','#124c24','#49ec7a',
+        '#165a2b','#54f283','#1a6832','#5ff88b',
+        '#1e7639','#6aff94','#228440','#75ff9d',
+        '#269247','#80ffa6','#2aa04e','#8bffaf',
+        '#2eae55','#96ffb8','#32bc5c','#a1ffc1'
+  ],
+  indigo: [
+        '#130827','#6737b7','#1a0b33','#6e3bc3',
+        '#210f3f','#7540cf','#28134b','#7c44db',
+        '#2f1757','#8348e7','#361b63','#8a4cf3',
+        '#3d1f6f','#9150ff','#44237b','#9b5aff',
+        '#4b2787','#a564ff','#522b93','#af6eff',
+        '#592f9f','#b978ff','#6033ab','#c382ff'
+  ],
+  orange: [
+        '#2b1304','#ea7217','#3a1a05','#fa7a19',
+        '#4a2206','#ff8423','#5a2a07','#ff8f35',
+        '#6a3208','#ff9a47','#7a3a09','#ffa559',
+        '#8a420b','#ffb06b','#9a4a0d','#ffbb7d',
+        '#aa520f','#ffc68f','#ba5a11','#ffd1a1',
+        '#ca6213','#ffdcb3','#da6a15','#ffe7c5'
+  ],
+  red: [
+        '#2b0404','#ea1717','#3a0505','#fa1919',
+        '#4a0606','#ff2323','#5a0707','#ff3535',
+        '#6a0808','#ff4747','#7a0909','#ff5959',
+        '#8a0b0b','#ff6b6b','#9a0d0d','#ff7d7d',
+        '#aa0f0f','#ff8f8f','#ba1111','#ffa1a1',
+        '#ca1313','#ffb3b3','#da1515','#ffc5c5'
+  ],
+  yellow: [
+        '#3f3300','#f9cc00','#514000','#ffd11a',
+        '#635000','#ffd633','#756000','#ffdb4d',
+        '#877000','#ffe066','#998000','#ffe580',
+        '#ab9000','#ffea99','#b89a00','#ffefb3',
+        '#c5a400','#fff4cc','#d2ae00','#fff9e6',
+        '#dfb800','#fffaf0','#ecc200','#fffdf7'
+  ]
+};
+
+
+    // Navmesh zones for each Goethe color
+    this.zones = [
+      {name: 'blue',   el: document.querySelector('[gltf-model="#navmesh-blue"]'),   box: null},
+      {name: 'green',  el: document.querySelector('[gltf-model="#navmesh-green"]'),  box: null},
+      {name: 'indigo', el: document.querySelector('[gltf-model="#navmesh-indigo"]'), box: null},
+      {name: 'orange', el: document.querySelector('[gltf-model="#navmesh-orange"]'), box: null},
+      {name: 'red',    el: document.querySelector('[gltf-model="#navmesh-red"]'),    box: null},
+      {name: 'yellow', el: document.querySelector('[gltf-model="#navmesh-yellow"]'), box: null}
+    ];
+  },
+
+  tick: function () {
+    const rig = this.rig;
+    if (!rig || !rig.object3D) return;
+
+    // rig world position
+    rig.object3D.getWorldPosition(this._rigPos);
+
+    let activeZone = null;
+
+    for (const z of this.zones) {
+      if (!z.el) continue;
+      const mesh = z.el.getObject3D('mesh') || z.el.object3D;
+      if (!mesh) continue;
+
+      // build bounding box once
+      if (!z.box) {
+        z.box = new THREE.Box3().setFromObject(mesh);
+      }
+
+      if (z.box.containsPoint(this._rigPos)) {
+        activeZone = z;
+        break;
+      }
+    }
+
+    // no change
+    if (activeZone === this.currentZone) return;
+
+    // if we have a new active zone, push its palette into spatial-marker
+    if (activeZone && this.palettes[activeZone.name]) {
+      const palette = this.palettes[activeZone.name];
+      // A-Frame expects a comma-separated list for array schema
+      const value = palette.join(',');
+      rig.setAttribute('spatial-marker', 'colors', value);
+      console.log('[goethe-zones] active zone:', activeZone.name);
+    }
+
+    this.currentZone = activeZone;
+  }
+});
+</script>
+
+
+  </body>
+</html>

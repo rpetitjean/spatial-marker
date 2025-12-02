@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Palette Builder (24 colors, JS array format)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{
+      --bg:#050814;
+      --card:#111827;
+      --accent:#38bdf8;
+      --text:#e5e7eb;
+      --muted:#9ca3af;
+    }
+    *{box-sizing:border-box;}
+    body{
+      margin:0;
+      padding:16px;
+      font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background: radial-gradient(circle at top, #0b1120, #020617 55%, #000 100%);
+      color:var(--text);
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+      min-height:100vh;
+    }
+    .card{
+      background:rgba(15,23,42,0.97);
+      border-radius:16px;
+      border:1px solid rgba(148,163,184,0.25);
+      padding:14px 16px;
+      box-shadow:0 18px 40px rgba(0,0,0,0.5);
+    }
+    h1{
+      font-size:18px;
+      margin:0 0 4px;
+    }
+    .subtitle{
+      font-size:13px;
+      color:var(--muted);
+      margin-bottom:10px;
+    }
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+      gap:10px;
+    }
+    .swatch{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      padding:8px;
+      border-radius:10px;
+      background:#020617;
+      border:1px solid rgba(51,65,85,0.8);
+    }
+    .swatch-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      font-size:11px;
+      color:var(--muted);
+    }
+    .swatch input[type="color"]{
+      width:100%;
+      height:32px;
+      border-radius:7px;
+      border:none;
+      padding:0;
+      background:transparent;
+      cursor:pointer;
+    }
+    .hex{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size:11px;
+      color:var(--muted);
+      text-align:right;
+    }
+    textarea{
+      width:100%;
+      min-height:180px;
+      background:#020617;
+      color:var(--text);
+      border-radius:12px;
+      border:1px solid rgba(71,85,105,0.9);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size:12px;
+      padding:10px 12px;
+      resize:vertical;
+      white-space:pre;
+    }
+    .row{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    button{
+      border-radius:999px;
+      border:1px solid rgba(148,163,184,0.5);
+      background:linear-gradient(to right,#0369a1,#0f766e);
+      color:white;
+      padding:7px 13px;
+      font-size:12px;
+      font-weight:600;
+      cursor:pointer;
+    }
+    button.secondary{
+      background:transparent;
+      border-color:rgba(148,163,184,0.6);
+      color:var(--muted);
+    }
+    button:active{ transform:translateY(1px); }
+    .copied{
+      font-size:11px;
+      color:#4ade80;
+      opacity:0;
+      transition:opacity .2s;
+    }
+    .copied.show{ opacity:1; }
+    .hint{
+      font-size:11px;
+      color:var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Palette Builder — 24 colors</h1>
+    <div class="subtitle">
+      Pick 24 colors. The output is formatted to paste directly inside
+      <code>this.palettes.&lt;color&gt; = [ ... ]</code> like:<br>
+      <code>        '#3f3300','#514000','#635000','#756000', ...</code>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+      <div style="font-size:13px; color:var(--muted);">
+        <strong>Step 1.</strong> Choose your 24 colors.
+      </div>
+      <div class="row">
+        <button id="randomize">Randomize</button>
+        <button id="reset" class="secondary">Reset defaults</button>
+      </div>
+    </div>
+
+    <div class="grid" id="swatchGrid"></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between; margin-bottom:6px;">
+      <div>
+        <strong style="font-size:13px;">Step 2.</strong>
+        <span class="hint">Copy and paste these lines into your JS palette.</span>
+      </div>
+      <div class="row">
+        <button id="copyBtn">Copy</button>
+        <span id="copiedLabel" class="copied">Copied ✔</span>
+      </div>
+    </div>
+    <textarea id="output" spellcheck="false"></textarea>
+    <div class="hint">
+      Example paste inside your object:<br>
+      <code>
+yellow: [<br>
+<span style="padding-left:16px;">/* paste below: */</span><br>
+<span style="padding-left:8px;">'#3f3300','#514000','#635000','#756000',</span><br>
+<span style="padding-left:8px;">... </span><br>
+]
+      </code>
+    </div>
+  </div>
+
+  <script>
+    // Default palette = your current yellow, but you can change to any base
+    const DEFAULTS = [
+     '#f2f23a','#d8d835',  
+  '#f4bd36','#d29930','#f58436','#d06430',   
+  '#f45336','#d13230','#f33a3a','#d13636','#f3398c','#d13470',   
+  '#f339f3','#d134d8','#9933f3','#7300d8','#3333f3','#0000d8',   
+  '#3399f3','#0073d8','#33f339','#00d836',   
+  '#99f339','#70d134'    
+    ];
+
+    const grid = document.getElementById('swatchGrid');
+    const output = document.getElementById('output');
+    const copyBtn = document.getElementById('copyBtn');
+    const copiedLabel = document.getElementById('copiedLabel');
+    const randomizeBtn = document.getElementById('randomize');
+    const resetBtn = document.getElementById('reset');
+
+    function createSwatches(){
+      grid.innerHTML = '';
+      for(let i=0;i<24;i++){
+        const wrap = document.createElement('div');
+        wrap.className = 'swatch';
+
+        const head = document.createElement('div');
+        head.className = 'swatch-header';
+
+        const label = document.createElement('span');
+        label.textContent = `Color ${i+1}`;
+
+        const hex = document.createElement('span');
+        hex.className = 'hex';
+        hex.textContent = (DEFAULTS[i] || '#ffffff').toLowerCase();
+
+        const inp = document.createElement('input');
+        inp.type = 'color';
+        inp.className = 'color-input';
+        inp.value = (DEFAULTS[i] || '#ffffff').toLowerCase();
+
+        inp.addEventListener('input', () => {
+          hex.textContent = inp.value.toLowerCase();
+          updateOutput();
+        });
+
+        head.appendChild(label);
+        head.appendChild(hex);
+        wrap.appendChild(head);
+        wrap.appendChild(inp);
+        grid.appendChild(wrap);
+      }
+    }
+
+    function getColors(){
+      const inputs = [...document.querySelectorAll('.color-input')];
+      return inputs.map(i => i.value.toLowerCase());
+    }
+
+    // Format like:
+    //        '#3f3300','#514000','#635000','#756000',
+    //        ...
+    function formatLines(colors){
+      const perLine = 4;
+      const lines = [];
+      const indent = '        '; // 8 spaces
+
+      const lastIndex = colors.length - 1;
+      for(let i=0;i<colors.length;i+=perLine){
+        const slice = colors.slice(i, i+perLine);
+        const parts = slice.map((c, idxInSlice) => {
+          const globalIdx = i + idxInSlice;
+          const isLast = (globalIdx === lastIndex);
+          // add trailing comma except very last color
+          return `'${c}'` + (isLast ? '' : ',');
+        });
+        lines.push(indent + parts.join(''));
+      }
+      return lines.join('\n');
+    }
+
+    function updateOutput(){
+      const colors = getColors();
+      output.value = formatLines(colors);
+    }
+
+    function randomHex(){
+      const c = () => Math.floor(Math.random()*256);
+      const toHex = n => n.toString(16).padStart(2,'0');
+      return '#' + toHex(c()) + toHex(c()) + toHex(c());
+    }
+
+    function randomizePalette(){
+      const inputs = [...document.querySelectorAll('.color-input')];
+      const hexLabels = [...document.querySelectorAll('.hex')];
+      inputs.forEach((inp, idx) => {
+        const col = randomHex().toLowerCase();
+        inp.value = col;
+        if (hexLabels[idx]) hexLabels[idx].textContent = col;
+      });
+      updateOutput();
+    }
+
+    function resetPalette(){
+      const inputs = [...document.querySelectorAll('.color-input')];
+      const hexLabels = [...document.querySelectorAll('.hex')];
+      inputs.forEach((inp, idx) => {
+        const col = (DEFAULTS[idx] || '#ffffff').toLowerCase();
+        inp.value = col;
+        if (hexLabels[idx]) hexLabels[idx].textContent = col;
+      });
+      updateOutput();
+    }
+
+    copyBtn.addEventListener('click', () => {
+      output.select();
+      try {
+        document.execCommand('copy');
+        copiedLabel.classList.add('show');
+        setTimeout(() => copiedLabel.classList.remove('show'), 900);
+      } catch(e){
+        console.warn('Copy failed', e);
+      }
+    });
+
+    randomizeBtn.addEventListener('click', randomizePalette);
+    resetBtn.addEventListener('click', resetPalette);
+
+    // init
+    createSwatches();
+    updateOutput();
+  </script>
+</body>
+</html>

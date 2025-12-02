@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>spatial-marker - export-drawing</title>
+    <meta name="description" content="A demo of the Spatial-Marker component">
+    
+    <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+    <script src="https://rpetitjean.github.io/spatial-marker/spatial-marker.js"></script>
+    
+    <script type="importmap">
+
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.173.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.173.0/examples/jsm/"
+  }
+}
+    </script>
+
+  </head>
+  
+  <body>
+
+    <a-scene background="color: #ECECEC">
+
+          <!-- PC & VR Rig -->
+    <a-entity  id="rig" spatial-marker wasd-controls >
+      <a-box id="camera" camera="fov:75; near: 0.1; far: 700"  position="0 1.7 0" visible="false" ></a-box>
+      <a-entity id="left-hand"  meta-touch-controls="hand: left"></a-entity>
+      <a-entity id="right-hand" meta-touch-controls="hand: right"></a-entity>
+    </a-entity>  
+
+      <a-plane position="0 0 -4" rotation="-90 0 0" width="6" height="6" color="#7BC8A4; opacity: 0.0; transparent: true" class="drawingArea"></a-plane>
+
+    </a-scene>
+
+<script type="module">
+  import * as THREE from 'https://unpkg.com/three@0.173.0/build/three.module.js';
+  import { GLTFExporter } from 'https://unpkg.com/three@0.173.0/examples/jsm/exporters/GLTFExporter.js';
+  import { OrbitControls } from 'https://unpkg.com/three@0.173.0/examples/jsm/controls/OrbitControls.js';
+
+  // ---------- helpers ----------
+  const tsName = (prefix='spatial-marker')=>{
+    const t=new Date(), pad=n=>(n<10?'0':'')+n;
+    return `${prefix}_${t.getFullYear()}${pad(t.getMonth()+1)}${pad(t.getDate())}_${pad(t.getHours())}${pad(t.getMinutes())}${pad(t.getSeconds())}.glb`;
+  };
+  const syncWorld = (root)=>{ try{ root.updateMatrixWorld(true); }catch(_){} };
+
+  // ---------- Blender-safe guards (hide risky nodes + sanitize geometry) ----------
+  function makeBlenderSafeGuards(root){
+    const hidden = [];
+    // Hide A-Frame UI / texture-driven nodes (controllers, hint planes, any [src], etc.)
+    const selectors = [
+      '#left-hand', '#right-hand', '.drawingArea',
+      '[src]', '[material*="src:"]'
+    ];
+    selectors.forEach(sel=>{
+      document.querySelectorAll(sel).forEach(el=>{
+        const o = el?.object3D;
+        if (o && o.visible) { hidden.push([o, o.visible]); o.visible = false; }
+      });
+    });
+
+    // Hide meshes with texture maps; sanitize geometry numbers; ensure indices/normals.
+    root.traverse(o=>{
+      if (!o.isMesh) return;
+      // Hide textured meshes so we don't embed CORS-tainted images.
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      if (mats.some(m => m && (m.map || m.emissiveMap || m.roughnessMap || m.metalnessMap || m.normalMap))) {
+        hidden.push([o, o.visible]); o.visible = false; return;
+      }
+
+      const g = o.geometry;
+      if (!g || !g.isBufferGeometry) return;
+
+      // Drop invalid or empty
+      const pos = g.getAttribute('position');
+      if (!pos || pos.count < 3) { hidden.push([o, o.visible]); o.visible = false; return; }
+
+      // Clamp drawRange and clean NaN/Inf in attributes
+      g.setDrawRange(0, pos.count);
+      ['position','normal','uv','color'].forEach(name=>{
+        const a = g.getAttribute(name);
+        if (!a) return;
+        let dirty = false;
+        const arr = a.array;
+        for (let i=0;i<arr.length;i++){
+          const v = arr[i];
+          if (!Number.isFinite(v)) { arr[i] = 0; dirty = true; }
+        }
+        if (dirty) a.needsUpdate = true;
+      });
+      if (!g.getAttribute('normal') || !g.getAttribute('normal').count) {
+        try { g.computeVertexNormals(); } catch(_){}
+      }
+      // Ensure indexed geometry (Blender is happier with indices).
+      if (!g.index) {
+        try { g.setIndex([...Array(pos.count).keys()]); } catch(_){}
+      }
+    });
+
+    // restore fn
+    return ()=>hidden.forEach(([o, v])=>{ o.visible = v; });
+  }
+
+  // ---------- floating window viewer (unchanged, with robust close) ----------
+  function openFloatingWindowWithBlob(blob, filename){
+    const url = URL.createObjectURL(blob);
+
+    if (!document.getElementById('glb-fwin-css')) {
+      const style = document.createElement('style');
+      style.id = 'glb-fwin-css';
+      style.textContent = `
+        .glb-fwin{position:fixed;top:6vh;left:6vw;width:70vw;height:70vh;background:#0b0d10;border:1px solid #334155;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35);display:flex;flex-direction:column;z-index:99999;overflow:hidden; font-family: system-ui, Segoe UI, Arial;}
+        .glb-fwin-header{display:flex;gap:8px;align-items:center;background:#111827;color:#e5e7eb;padding:8px 10px;user-select:none}
+        .glb-fwin-title{font:600 14px/1 system-ui, Segoe UI, Arial; color:#e5e7eb}
+        .glb-fwin-spacer{flex:1}
+        .glb-fwin-btn{padding:6px 10px;border-radius:8px;background:#1f2937;border:1px solid #334155;color:#e5e7eb;text-decoration:none;cursor:pointer}
+        .glb-fwin-btn:hover{background:#0f172a}
+        .glb-fwin-body{position:relative;flex:1;min-height:0}
+        .glb-fwin-body canvas{display:block;width:100%;height:100%}
+        .glb-fwin-resize{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,#334155 50%)}
+      `;
+      document.head.appendChild(style);
+    }
+
+    const frame = document.createElement('div'); frame.className = 'glb-fwin';
+    const header = document.createElement('div'); header.className = 'glb-fwin-header';
+    const title = document.createElement('div'); title.className = 'glb-fwin-title'; title.textContent = filename;
+    const spacer = document.createElement('div'); spacer.className = 'glb-fwin-spacer';
+    const btnDL  = document.createElement('a');  btnDL.className='glb-fwin-btn'; btnDL.textContent='⬇️ Download'; btnDL.href=url; btnDL.download=filename;
+    const btnExt = document.createElement('a');  btnExt.className='glb-fwin-btn'; btnExt.textContent='↗︎ About this viewer'; btnExt.href='https://github.com/donmccurdy/three-gltf-viewer'; btnExt.target='_blank'; btnExt.rel='noopener';
+    const btnClose = document.createElement('button'); btnClose.className='glb-fwin-btn'; btnClose.textContent='✕'; btnClose.type='button';
+    btnClose.style.minWidth = '44px'; btnClose.style.minHeight = '34px';
+    header.append(title, spacer, btnDL, btnExt, btnClose);
+
+    const body = document.createElement('div'); body.className = 'glb-fwin-body';
+    const resizeHandle = document.createElement('div'); resizeHandle.className = 'glb-fwin-resize';
+    body.appendChild(resizeHandle);
+    frame.append(header, body);
+    document.body.appendChild(frame);
+
+    // Drag (ignore clicks on buttons)
+ let dragging=false, dragSX=0, dragSY=0, ox=0, oy=0, pid=null;
+
+    header.addEventListener('pointerdown', e=>{
+      if (e.button!==0) return;
+      if (e.target.closest('.glb-fwin-btn')) return;
+ dragging=true; pid=e.pointerId; dragSX=e.clientX; dragSY=e.clientY;
+  const r=frame.getBoundingClientRect(); ox=r.left; oy=r.top;
+  header.setPointerCapture(pid);
+    });
+    header.addEventListener('pointermove', e=>{
+  if (!dragging || e.pointerId!==pid) return;
+  const nx=Math.max(0,Math.min(window.innerWidth-frame.offsetWidth,  ox+(e.clientX-dragSX)));
+  const ny=Math.max(0,Math.min(window.innerHeight-frame.offsetHeight, oy+(e.clientY-dragSY)));
+  frame.style.left=nx+'px'; frame.style.top=ny+'px';
+    });
+    header.addEventListener('pointerup', e=>{
+      if (e.pointerId!==pid) return;
+      dragging=false; try{ header.releasePointerCapture(pid);}catch(_){}
+      pid=null;
+    });
+    [btnDL,btnExt,btnClose].forEach(el=>el.addEventListener('pointerdown', e=>e.stopPropagation(), {passive:true}));
+
+    // Resize
+    let resizing=false, rsId=null, resSX=0, resSY=0, sw=0, sh=0;
+
+   resizeHandle.addEventListener('pointerdown', e=>{ rsId=e.pointerId; resizing=true; resSX=e.clientX; resSY=e.clientY; sw=frame.offsetWidth; sh=frame.offsetHeight; resizeHandle.setPointerCapture(rsId); });
+resizeHandle.addEventListener('pointermove', e=>{
+  if (!resizing || e.pointerId!==rsId) return;
+  const nw=Math.max(360, sw+(e.clientX-resSX));
+  const nh=Math.max(240, sh+(e.clientY-resSY));
+  frame.style.width=nw+'px'; frame.style.height=nh+'px';
+  onResize();
+});
+
+    resizeHandle.addEventListener('pointerup', e=>{ if (e.pointerId!==rsId) return; resizing=false; try{ resizeHandle.releasePointerCapture(rsId);}catch(_){ } rsId=null; });
+
+    // Three viewer
+    const renderer = new THREE.WebGLRenderer({ antialias:true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b0d10);
+    const camera = new THREE.PerspectiveCamera(60, 2, 0.01, 1000); camera.position.set(1.8,1.2,2.2);
+    const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x202020, 1.0));
+    const dir = new THREE.DirectionalLight(0xffffff, 1.0); dir.position.set(5,10,7); scene.add(dir);
+    const grid = new THREE.GridHelper(10,10,0x335577,0x223344); grid.material.opacity=0.35; grid.material.transparent=true; scene.add(grid);
+
+    (async ()=>{
+      const { GLTFLoader } = await import('https://unpkg.com/three@0.173.0/examples/jsm/loaders/GLTFLoader.js');
+      new GLTFLoader().load(url, (gltf)=>{
+        const root = gltf.scene || gltf.scenes?.[0];
+        scene.add(root);
+        const box = new THREE.Box3().setFromObject(root);
+        const size = box.getSize(new THREE.Vector3()).length() || 1;
+        const center = box.getCenter(new THREE.Vector3());
+        controls.target.copy(center);
+        camera.position.copy(center).add(new THREE.Vector3(0.5, size*0.4, size*0.8));
+        camera.near=size/1000; camera.far=size*10; camera.updateProjectionMatrix();
+      });
+    })();
+
+    function onResize(){
+      const w = body.clientWidth, h = body.clientHeight;
+      camera.aspect = Math.max(1e-6, w / Math.max(1, h));
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h, false);
+    }
+    const ro = new ResizeObserver(onResize); ro.observe(body); onResize();
+    renderer.setAnimationLoop(()=>{ controls.update(); renderer.render(scene, camera); });
+
+    // Close
+    function doClose(){
+      try { renderer.setAnimationLoop(null); } catch(_){}
+      try { ro.disconnect(); } catch(_){}
+      try { URL.revokeObjectURL(url); } catch(_){}
+      frame.remove();
+      document.removeEventListener('keydown', onEsc, true);
+    }
+    const onEsc = (e)=>{ if (e.key==='Escape'){ e.stopPropagation(); e.preventDefault(); doClose(); } };
+    document.addEventListener('keydown', onEsc, true);
+    btnClose.addEventListener('click', e=>{ e.preventDefault(); e.stopPropagation(); doClose(); });
+    btnClose.addEventListener('keydown', e=>{ if (e.key==='Enter'||e.key===' '){ e.preventDefault(); doClose(); } });
+  }
+
+  // ---------- export (normal vs blender-safe) ----------
+  const REGULAR_OPTS = { binary:true, onlyVisible:true, embedImages:true };
+  const BLENDER_OPTS = { binary:true, onlyVisible:true, embedImages:true, includeCustomExtensions:false, forceIndices:true, truncateDrawRange:true };
+
+  async function exportToFloatingWindow(rootObj3D, {blenderSafe=false}={}){
+    // Leave VR so window is visible on headset
+    const sceneEl = document.querySelector('a-scene');
+    if (sceneEl?.is('vr-mode')) { try { await sceneEl.exitVR(); } catch(_){} }
+
+    syncWorld(rootObj3D);
+    const exporter = new GLTFExporter();
+    const filename = tsName(blenderSafe ? 'spatial-marker_blender' : 'spatial-marker');
+
+    let restore = ()=>{};
+    if (blenderSafe) restore = makeBlenderSafeGuards(rootObj3D);
+
+    exporter.parse(
+      rootObj3D,
+      (ab)=>{
+        restore();
+        const blob = new Blob([ab], { type: 'model/gltf-binary' });
+        openFloatingWindowWithBlob(blob, filename);
+      },
+      (err)=>{ restore(); console.warn('[export] failed:', err); },
+      blenderSafe ? BLENDER_OPTS : REGULAR_OPTS
+    );
+  }
+
+  // ---------- triggers ----------
+  // Desktop:
+  window.addEventListener('keydown', (e)=>{
+    if (e.repeat) return;
+    const k = (e.key||'').toLowerCase();
+    if (k === 'e' || k === 'b') {
+      e.preventDefault();
+      const scene = document.querySelector('a-scene')?.object3D;
+      if (!scene) return;
+      exportToFloatingWindow(scene, { blenderSafe: k === 'b' });
+    }
+  });
+
+  // VR dual-grip → Blender-safe
+  const HOLD_MS = 600;
+  const left  = document.getElementById('left-hand');
+  const right = document.getElementById('right-hand');
+  const state = { left:false, right:false, timer:null, cooldown:false };
+
+  function tryStartTimer(){
+    if (state.timer || state.cooldown) return;
+    if (state.left && state.right){
+      state.timer = setTimeout(()=>{
+        state.timer = null;
+        if (state.left && state.right){
+          state.cooldown = true; setTimeout(()=> state.cooldown=false, 1200);
+          const scene = document.querySelector('a-scene')?.object3D;
+          if (scene) exportToFloatingWindow(scene, { blenderSafe:true });
+        }
+      }, HOLD_MS);
+    }
+  }
+  function onPress(e){ const s=(e.currentTarget===left)?'left':'right'; state[s]=true; tryStartTimer(); }
+  function onRelease(e){ const s=(e.currentTarget===left)?'left':'right'; state[s]=false; if(state.timer){ clearTimeout(state.timer); state.timer=null; } }
+
+  ['gripdown','squeezestart'].forEach(ev=>{ left?.addEventListener(ev,onPress); right?.addEventListener(ev,onPress); });
+  ['gripup','squeezeend'  ].forEach(ev=>{ left?.addEventListener(ev,onRelease); right?.addEventListener(ev,onRelease); });
+</script>
+
+
+  </body>
+</html>

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A-Frame Spatial-Marker</title>
+  <style>
+    :root {
+      --fg:#111; --muted:#555; --link:#0a66ff; --border:#e5e7eb;
+      --red:#E94462; --blue:#80A8FF; --yellow:#ffff00;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji","Segoe UI Emoji"; color:var(--fg); background:#fff}
+    main{max-width:980px; margin:0 auto; padding:32px 20px 64px}
+    h1{font-size:clamp(28px,4vw,42px); line-height:1.15; margin:0 0 12px}
+    p{margin:10px 0}
+    small{color:var(--muted)}
+    a{color:var(--link); text-decoration:none}
+    a:hover{opacity:.85}
+
+    /* GIF row */
+   .gif-row{
+  display:flex; gap:12px; margin:18px 0 8px;
+  flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch;
+}
+
+.gif-row img{
+  flex:0 0 auto;
+  width:min(24vmin,128px);
+  height:min(24vmin,128px);
+  border:1px solid var(--border);
+  border-radius:10px;
+}
+
+    /* Sections */
+    section{margin:28px 0}
+    h2{font-size:22px; margin:0 0 6px}
+    hr{border:0; border-top:1px solid var(--border); margin:22px 0}
+
+    /* Code blocks */
+    pre{background:#fafafa; border:1px solid var(--border); border-radius:10px; padding:14px; overflow:auto; margin:12px 0}
+    code{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size:13px}
+
+    /* How it works list */
+    .steps{display:grid; gap:10px}
+    .step{display:flex; align-items:flex-start; gap:10px}
+    .step img{width:28px; height:28px; border:1px  var(--border); border-radius:6px; object-fit:cover}
+
+    /* Color chips for controls */
+    .chip{display:inline-block; padding:2px 8px; border-radius:6px; font-weight:700; line-height:1; letter-spacing:.2px}
+    .chip.a{background:var(--red); color:#fff}
+    .chip.b{background:var(--blue); color:#fff}
+    .chip.grip{background:var(--yellow); color:#111}
+
+    /* Examples */
+    ul{padding-left:18px}
+
+    /* Footer */
+    footer{margin-top:40px; padding-top:16px; border-top:1px solid var(--border)}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>A-Frame Spatial-Marker</h1>
+      <div class="gif-row">
+        <!-- Replace these GIF sources with your own -->
+        <img src="assets/gifs/hello-gif.gif" alt="Spatial-Marker demo 1 (placeholder)">
+        <img src="assets/gifs/Spatial-marker.gif" alt="Spatial-Marker demo 2 (placeholder)">
+        <img src="assets/gifs/for-aframe.gif" alt="Spatial-Marker demo 3 (placeholder)">
+
+      </div>
+        <small>draw in 3D with A-Frame // 24 colors & 4 marker sizes</small>
+    </header>
+
+    <section>
+      <p>
+        This simple VR component is made for
+        <a href="https://aframe.io/" target="_blank" rel="noopener">A‑Frame</a>
+        projects and along the <a href="https://aframe.io/docs/1.7.0/components/meta-touch-controls.html" target="_blank" rel="noopener">meta‑touch controls</a>
+        inputs. It allows users to draw in 3D space on defined drawing areas using one of their VR controllers.
+      </p>
+
+            <p>
+   This Spatial-Marker component embeds its own movement logic using the thumbsticks, so it can be used in any A-Frame scene without any other locomotion system but the use of teleport-controls isn't recommended due to the use of the color palette.
+      </p>
+    </section>
+
+    <hr>
+
+    <section>
+      <h2>How to use</h2>
+      <p>Place the <a href="https://github.com/rpetitjean/spatial-marker/blob/main/spatial-marker.js"><code>spatial-marker.js</code>  </a>script along with the latest A‑Frame version in the <code>&lt;head&gt;</code> section:</p>
+      <pre><code>&lt;script src="https://aframe.io/releases/1.7.1/aframe.min.js"&gt;&lt;/script&gt;
+&lt;script src="https://rpetitjean.github.io/spatial-marker/spatial-marker.js"&gt;&lt;/script&gt;</code></pre>
+
+      <p>
+        Place the <code>spatial-marker</code> component as part of your VR rig along the following structure using 
+        <a href="https://aframe.io/docs/1.7.0/components/meta-touch-controls.html" target="_blank" rel="noopener">meta‑touch controls</a>:
+      </p>
+
+      <pre><code>&lt;a-entity id="rig" spatial-marker&gt;
+  &lt;a-box id="camera" camera="fov:75; near:0.1; far:700" position="0 1.7 0" visible="false"&gt;&lt;/a-box&gt;
+  &lt;a-entity id="left-hand"  meta-touch-controls="hand: left"&gt;&lt;/a-entity&gt;
+  &lt;a-entity id="right-hand" meta-touch-controls="hand: right"&gt;&lt;/a-entity&gt;
+&lt;/a-entity&gt;</code></pre>
+
+      <p>Set up one or multiple drawing areas using the <code>.drawingArea</code> class:</p>
+      <pre><code>&lt;a-plane position="0 0 -4" rotation="-90 0 0" width="4" height="4"
+         color="#7BC8A4" opacity="0.0" transparent="true"
+         class="drawingArea"&gt;&lt;/a-plane&gt;</code></pre>
+    </section>
+
+    <hr>
+
+    <section>
+      <h2>How it works</h2>
+      <div class="steps">
+        <div class="step">
+
+          <div>Navigate in space with the thumbsticks to a defined drawing area.</div>
+        </div>
+        <div class="step">
+          <img src="assets/UI/hand-swap.png" alt="Grip (yellow) icon placeholder" />
+          <div>Define your painting hand with the <span class="chip grip">Grip</span>. Default is the right hand.</div>
+        </div>
+        <div class="step">
+          <img src="assets/UI/size-marker.png" alt="B / Y (blue) icon placeholder" />
+          <div>Set line size with either <span class="chip b">B</span> or <span class="chip b">Y</span>.</div>
+        </div>
+        <div class="step">
+          <img src="assets/UI/undo.png" alt="A / X (red) icon placeholder" />
+          <div>Delete the last line with either <span class="chip a">A</span> or <span class="chip a">X</span>.</div>
+        </div>
+        <div class="step">
+          <img src="assets/UI/marker.png" alt="Trigger icon placeholder" />
+          <div>Start painting with the trigger.</div>
+        </div>
+        <div class="step">
+          <img src="assets/UI/Palette.png" alt="Joystick color pick icon placeholder" />
+          <div>Pick a color with the non‑drawing hand joystick.</div>
+        </div>
+      </div>
+    </section>
+
+    <hr>
+
+    <section>
+      <h2>Examples</h2>
+      <ul>
+        <li>
+          <a href="examples/demo.html">Demo</a> — a minimalistic scene and set up with one drawing area
+        </li>
+        <li>
+          <a href="examples/export-drawing.html">Export drawing</a> — export all the lines drawn with the three.js glTF exporter
+        </li>
+        <li>
+          <a href="examples/export-photos.html">Export photographs</a> — export photographs of each painting zone
+        </li>
+        <li>
+          <a href="examples/goethe.html">Goethe's color diagram</a> — an exploration of the singular color diagram by Johann Wolfgang von Goethe on the symbolic of colors
+        </li>
+          <li>
+          <a href="examples/palette-builder.html">Palette Builder</a> (tool) — an easy tool to define the colors of the palette
+        </li>
+      </ul>
+    </section>
+
+       
+
+    <footer>
+      created by <a href="https://remipetitjean.com/" target="_blank" rel="noopener">remi petitjean</a>
+    </footer>
+  </main>
+</body>
+</html>
