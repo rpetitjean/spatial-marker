@@ -13,7 +13,7 @@
 
   <body>
 
-    <a-scene>
+    <a-scene xr-mode-ui="XRMode: ar">
 
           <!-- PC & VR Rig -->
     <a-entity  id="rig" spatial-marker>
@@ -22,7 +22,7 @@
       <a-entity id="right-hand" meta-touch-controls="hand: right"></a-entity>
     </a-entity>  
 
-      <a-plane position="0 0 -4" rotation="-90 0 0" width="4" height="4" class="drawingArea"></a-plane>
+      <a-plane position="0 0 0" rotation="-90 0 0" width="4" height="4" material="opacity: 0" class="drawingArea"></a-plane>
 
     </a-scene>
 
