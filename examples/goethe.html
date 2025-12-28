@@ -2,131 +2,318 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>goethe</title>
+    <title>Goethe's Theory of Colours</title>
     <meta name="description" content="A demo of the Spatial-Marker component">
     
     <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
     <script src="https://rpetitjean.github.io/spatial-marker/spatial-marker.js"></script>
 
     <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.6.0/dist/aframe-extras.min.js"></script>
- <script src="https://cdn.jsdelivr.net/gh/AdaRoseCannon/aframe-xr-boilerplate/simple-navmesh-constraint.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AdaRoseCannon/aframe-xr-boilerplate/simple-navmesh-constraint.js"></script>
     <script src="https://unpkg.com/aframe-environment-component@1.5.x/dist/aframe-environment-component.min.js"></script>
+    <script src="animate-gradient.js"></script>
 
+    <script src="intro-overlay.js" ></script>
 
-  </head>
+<!-- Fades in glb models when the user is in a defined color zone -->
+  <script>
+AFRAME.registerComponent('area-fade-gradient', {
+  schema: {
+    target:     { type: 'selector' },         // GLB with gradient-color
+    zone:       { type: 'string' },           // 'orange', 'blue', etc
+    maxOpacity: { type: 'number', default: 1 },   // when this zone is active
+    minOpacity: { type: 'number', default: 0.1 }, // otherwise
+    speed:      { type: 'number', default: 2 }    // fade speed (per second)
+  },
+
+  init: function () {
+    const data   = this.data;
+    this.active  = false;
+    this.currentOpacity = data.minOpacity;
+    this.targetOpacity  = data.minOpacity;
+
+    const sceneEl = this.el.sceneEl;
+    this.onZoneChanged = (e) => {
+      const activeName = e.detail && e.detail.name;
+      this.active = (activeName === data.zone);
+    };
+
+    if (sceneEl) {
+      sceneEl.addEventListener('goethe-zone-changed', this.onZoneChanged);
+    }
+  },
+
+  remove: function () {
+    const sceneEl = this.el.sceneEl;
+    if (sceneEl && this.onZoneChanged) {
+      sceneEl.removeEventListener('goethe-zone-changed', this.onZoneChanged);
+    }
+  },
+
+  tick: function (time, dt) {
+    const targetEl = this.data.target;
+    if (!targetEl) return;
+
+    // Set target opacity based on zone activity
+    this.targetOpacity = this.active ? this.data.maxOpacity : this.data.minOpacity;
+
+    // Smooth fade
+    const dtSec      = dt / 1000;
+    const lerpFactor = 1.0 - Math.exp(-this.data.speed * dtSec);
+    this.currentOpacity = THREE.MathUtils.lerp(
+      this.currentOpacity,
+      this.targetOpacity,
+      lerpFactor
+    );
+
+    // Apply opacity to target's gradient-color shader
+    const mesh = targetEl.getObject3D('mesh');
+    if (!mesh) return;
+
+    mesh.traverse((node) => {
+      if (!node.isMesh || !node.material || !node.material.uniforms) return;
+      if (node.material.uniforms.opacity) {
+        node.material.uniforms.opacity.value = this.currentOpacity;
+      }
+    });
+
+    // Toggle visibility for perf
+    targetEl.setAttribute('visible', this.currentOpacity > 0.01);
+  }
+
   
+});
 
+  </script>
 
-  <body>
+<!-- Fade on Event: fades-in and out the three info texts when clicking a defined object-->
+<script>
+AFRAME.registerComponent('fade-on-event', {
+  schema: {
+    targets:      { type: 'string' },           // CSS selector: "#goethe-text, .caption"
+    event:        { type: 'string', default: 'click' },
+    duration:     { type: 'number', default: 2 },   // fade in/out duration (seconds)
+    from:         { type: 'number', default: 0 },   // hidden opacity
+    to:           { type: 'number', default: 1 },   // visible opacity
+    delay:        { type: 'number', default: 0 },   // delay before fade-in (seconds)
+    hold:         { type: 'number', default: 0 },   // time fully visible before fade-out (0 = no auto fade-out)
+    once:         { type: 'boolean', default: false }, // if true: only first full cycle
+    autoInit:     { type: 'boolean', default: true },  // hide targets at init
+    group:        { type: 'string',  default: '' }     // group name for mutual exclusion
+  },
 
-    <a-scene light="defaultLightsEnabled: false" background="color: #ffffff" renderer="colorManagement: true; physicallyCorrectLights: true"   goethe-zones="rig: #rig">
+  init: function () {
+    this.targets = [];
 
-  <a-assets>
-    <a-asset-item id="env" src="assets/goethe-colors/env-goethe.glb"></a-asset-item>
-   <a-asset-item id="navmesh" src="assets/goethe-colors/navmesh-env.glb"></a-asset-item>
-   <a-asset-item id="table" src="assets/goethe-colors/table.glb"></a-asset-item>
-   <img id="diagram" src="assets/goethe-colors/upscale-diagram_png512.png">
-   <a-asset-item id="goethe" src="assets/goethe-colors/goethe.glb"></a-asset-item>
-    
-     <a-asset-item id="navmesh-blue" src="assets/goethe-colors/navmesh-blue.glb"></a-asset-item>
-     <a-asset-item id="navmesh-green" src="assets/goethe-colors/navmesh-green.glb"></a-asset-item>
-     <a-asset-item id="navmesh-indigo" src="assets/goethe-colors/navmesh-indigo.glb"></a-asset-item>
-     <a-asset-item id="navmesh-orange" src="assets/goethe-colors/navmesh-orange.glb"></a-asset-item>
-     <a-asset-item id="navmesh-red" src="assets/goethe-colors/navmesh-red.glb"></a-asset-item>
-     <a-asset-item id="navmesh-yellow" src="assets/goethe-colors/navmesh-yellow.glb"></a-asset-item>
+    // state machine: 'idle' | 'delay' | 'fadeIn' | 'hold' | 'fadeOut'
+    this.state = 'idle';
+    this.timer = 0;
+    this._alreadyTriggered = false;
+    this.lastOpacity = this.data.from;
+    this.fadeStartOpacity = this.data.from;
 
-     <a-asset-item id="interactable-blue" src="assets/goethe-colors/interactable/interactable-blue.glb"></a-asset-item>
-     <a-asset-item id="interactable-green" src="assets/goethe-colors/interactable/interactable-green.glb"></a-asset-item>
-     <a-asset-item id="interactable-indigo" src="assets/goethe-colors/interactable/interactable-indigo.glb"></a-asset-item>
-     <a-asset-item id="interactable-orange" src="assets/goethe-colors/interactable/interactable-orange.glb"></a-asset-item>
-     <a-asset-item id="interactable-red" src="assets/goethe-colors/interactable/interactable-red.glb"></a-asset-item>
-     <a-asset-item id="interactable-yellow" src="assets/goethe-colors/interactable/interactable-yellow.glb"></a-asset-item>
+    this._updateTargetList();
 
-    <a-asset-item id="eyes" src="assets/goethe-colors/Eyes.glb"></a-asset-item>
-    <a-asset-item id="forest" src="assets/goethe-colors/Forest.glb"></a-asset-item>
-    <a-asset-item id="frame" src="assets/goethe-colors/Frame.glb"></a-asset-item>
-    <a-asset-item id="indigo-element" src="assets/goethe-colors/indigo.glb"></a-asset-item>
-    <a-asset-item id="frame-cube" src="assets/goethe-colors/Frame-cube.glb"></a-asset-item>
-    <a-asset-item id="frame-orange" src="assets/goethe-colors/frame-orange.glb"></a-asset-item>
+    if (this.data.autoInit) {
+      this._hideTargetsImmediately();
+    }
 
-  </a-assets>
+    if (this.data.event === 'click') {
+      this.el.classList.add('clickable');
+    }
 
-          <!-- PC & VR Rig -->
-<a-entity id="rig" 
-spatial-marker
-movement-controls="constrainToNavMesh: true ; speed : 0.5; controls: keyboard; enabled:true"  
-position="-0.8 0 3.6" rotation="0 -20 0"
-simple-navmesh-constraint="navmesh:.navmesh;fall:0;height:0;exclude:.navmesh-hole; "
-cursor="rayOrigin: mouse"
-         raycaster="objects: .clickable">
+    this._onEvent = this._onEvent.bind(this);
+    this._onGlobalFadeStart = this._onGlobalFadeStart.bind(this);
 
-      <a-box camera="far: 700; fov: 55; near: 0.1; active: true" position="0 1.7 0" visible="false"  look-controls="pointerLockEnabled: true; touchEnabled: false; mouseEnabled: true; magicWindowTrackingEnabled: false"></a-box>
-      <a-entity id="left-hand" meta-touch-controls="" ></a-entity>
-      <a-entity id="right-hand" meta-touch-controls="hand: right"></a-entity>
-</a-entity>
+    this.el.addEventListener(this.data.event, this._onEvent);
 
- <!-- Sky -->
-<a-sky radius="200" theta-length="110" class="environment" material="shader: skyshader; blending: none; anisotropy: 1.04; turbidity: 20; mieCoefficient: 0.1; mieDirectionalG: 0.72; sunPosition: -0.10389385923870163 0.9444896294427422 0.31168157771610494"></a-sky>
-  
-<!-- Lights -->
+    const sceneEl = this.el.sceneEl || document.querySelector('a-scene');
+    if (sceneEl) {
+      sceneEl.addEventListener('fade-on-event-started', this._onGlobalFadeStart);
+    }
+  },
 
-<a-entity light="intensity: 1; type: ambient"></a-entity>
-<a-entity light="intensity: 1.884; castShadow: true; shadowBias: -0.0002; shadowCameraFov: 0; shadowCameraNear: -2.47; shadowCameraTop: 8.11; shadowCameraRight: 7.68; shadowCameraBottom: -12.3; shadowCameraLeft: -11.9" position="-0.49743 2.96771 1.19041" data-aframe-default-light="" aframe-injected=""></a-entity>
-<a-entity light="intensity: 1.5; type: point" position="0 1.88667 0"></a-entity>
+  remove: function () {
+    this.el.removeEventListener(this.data.event, this._onEvent);
+    const sceneEl = this.el.sceneEl || document.querySelector('a-scene');
+    if (sceneEl) {
+      sceneEl.removeEventListener('fade-on-event-started', this._onGlobalFadeStart);
+    }
+  },
 
-<!-- Scene Environement -->
-<a-entity gltf-model="#env" rotation="0 -90 0" position="0 0 0" shadow=""></a-entity>
-<a-entity gltf-model="#navmesh" rotation="0 -90 0" position="0 0 0" visible="false" class="navmesh"></a-entity>
+  update: function (oldData) {
+    if (!oldData || oldData.targets !== this.data.targets) {
+      this._updateTargetList();
+      if (this.data.autoInit) {
+        this._hideTargetsImmediately();
+      }
+    }
+  },
 
-<!-- Goethe's bust + diagram + table -->  
-<a-entity gltf-model="#goethe" rotation="0 -90 0" position="0 0 0" shadow=""></a-entity>
-<a-entity material="shader: ; transparent: true; src: #diagram; " geometry="primitive: plane" rotation="-90.00021045914971 62.589336582296 0" position="-0.03296 0.81397 0" id="diagram-element" 
-  shimmer-material="opacity: 1; shimmerIntensity: 1.5; shimmerSpeed: 1.0"></a-entity>
-<a-entity gltf-model="#table" rotation="0 -90 0" position="0 0 0" visible="true"></a-entity>
+  _updateTargetList: function () {
+    const sel = this.data.targets;
+    if (!sel) {
+      this.targets = [];
+      return;
+    }
+    const sceneEl = this.el.sceneEl || document.querySelector('a-scene');
+    if (!sceneEl) {
+      this.targets = [];
+      return;
+    }
+    this.targets = Array.from(sceneEl.querySelectorAll(sel));
+  },
 
+  _hideTargetsImmediately: function () {
+    this.targets.forEach((el) => {
+      el.setAttribute('visible', false);
+      el.addEventListener('model-loaded', () => {
+        this._setOpacityOnMesh(el, this.data.from);
+      });
+    });
+  },
 
-     <!-- navmeshs -->
-<a-entity gltf-model="#navmesh-blue" rotation="0 -90 0" position="0 0 0" class="drawingArea navmesh" visible="false"></a-entity>
-<a-entity gltf-model="#navmesh-green" rotation="0 -90 0" position="0 0 0" shadow="" class="drawingArea navmesh" visible="false"></a-entity>
-<a-entity gltf-model="#navmesh-indigo" rotation="0 -90 0" position="0 0 0" shadow="" class="drawingArea navmesh" visible="false"></a-entity>
-<a-entity gltf-model="#navmesh-orange" rotation="0 -90 0" position="0 0 0" shadow="" class="drawingArea navmesh" visible="false"></a-entity>
-<a-entity gltf-model="#navmesh-red" rotation="0 -90 0" position="0 0 0" class="drawingArea navmesh" visible="false"></a-entity>
-<a-entity gltf-model="#navmesh-yellow" rotation="0 -90 0" position="0 0 0" class="drawingArea navmesh" visible="false"></a-entity>
+  _onEvent: function () {
+    // Ignore if an animation is already running
+    if (this.state !== 'idle') return;
 
+    // If single-use and already did one full cycle, ignore
+    if (this.data.once && this._alreadyTriggered) return;
 
-  <!-- interactable -->
-<a-entity id="btn-blue" gltf-model="#interactable-blue" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
-<a-entity id="btn-green" gltf-model="#interactable-green" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
-<a-entity id="btn-indigo" gltf-model="#interactable-indigo" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
-<a-entity id="btn-orange" gltf-model="#interactable-orange" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
-<a-entity id="btn-red" gltf-model="#interactable-red" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
-<a-entity id="btn-yellow" gltf-model="#interactable-yellow" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
+    // Announce to the group that THIS one is starting
+    const sceneEl = this.el.sceneEl || document.querySelector('a-scene');
+    if (sceneEl && this.data.group) {
+      sceneEl.emit('fade-on-event-started', {
+        group: this.data.group,
+        source: this.el
+      });
+    }
 
+    this._alreadyTriggered = true;
+    this.timer = 0;
 
-<!-- drawing space elements -->
-<!-- Frame Orange -->
-<a-entity gltf-model="#frame-orange" position="0 1.60188 -6.24755" rotation="0 90.2007456874455 0"></a-entity>
+    if (this.data.delay > 0) {
+      this.state = 'delay';
+    } else {
+      this.state = 'fadeIn';
+      this.fadeStartOpacity = this.data.from;
+    }
 
-<!-- Frame Blue -->
-<a-entity gltf-model="#frame" position="0 1.60188 5.81842" scale="0.5 0.5 0.5" rotation="0 180 0"></a-entity>
+    this._setOpacityAll(this.data.from);
+  },
 
-<!-- Frame Red -->
-<a-entity gltf-model="#eyes" position="-5.6716 1.40836 -3.02604" scale="2 2 2" rotation="0 151.31761000000003 0"></a-entity>
+  // When another member of the same group starts, fade THIS one out
+  _onGlobalFadeStart: function (e) {
+    const detail = e.detail || {};
+    const group = detail.group;
+    const source = detail.source;
 
-<!-- Frame Yellow -->
-<a-entity gltf-model="#frame-cube" position="3.47565 0.01254 -4.42115" scale="0.25 0.18878 0.25" rotation="0 152.75971550659958 0"></a-entity>
-<a-entity gltf-model="#frame-cube" position="4.52671 0.06421 -2.93033" scale="0.25 0.23012 0.25" rotation="0 114.68953480913203 0"></a-entity>
-<a-entity gltf-model="#frame-cube" position="5.45515 0.02306 -1.33622" scale="0.25 0.12743 0.25" rotation="0 152.75971550659958 0"></a-entity>
+    if (!group || group !== this.data.group) return;
+    if (source === this.el) return; // that's us, ignore
 
-<!-- Frame Green -->
-<a-entity gltf-model="#forest" rotation="0 -90 0" position="0 0 0"></a-entity>
+    // If currently idle and already at "from", nothing to do
+    if (this.state === 'idle' && this.lastOpacity <= this.data.from + 0.001) {
+      return;
+    }
 
-<!-- Frame Violet -->
-<a-entity gltf-model="#indigo-element" rotation="0 -90 0" position="0 0 0"></a-entity>
+    // Start a smooth fade-out from current opacity → from
+    this.state = 'fadeOut';
+    this.timer = 0;
+    this.fadeStartOpacity = this.lastOpacity;
+  },
 
-</a-scene>
+  _setOpacityAll: function (value) {
+    this.lastOpacity = value;
+    this.targets.forEach((el) => this._setOpacityOnMesh(el, value));
+  },
 
-<!-- Export Scene Module -->
+  _setOpacityOnMesh: function (el, value) {
+    const v = THREE.MathUtils.clamp(value, 0, 1);
+    const mesh = el.getObject3D('mesh');
+
+    el.setAttribute('visible', v > 0.01);
+
+    if (!mesh) return;
+
+    mesh.traverse((node) => {
+      if (!node.isMesh || !node.material) return;
+      const mats = Array.isArray(node.material) ? node.material : [node.material];
+
+      mats.forEach((mat) => {
+        if (!mat) return;
+
+        mat.transparent = true;
+        mat.opacity = v;
+        mat.needsUpdate = true;
+
+        if (mat.uniforms && mat.uniforms.opacity) {
+          mat.uniforms.opacity.value = v;
+        }
+      });
+    });
+  },
+
+  tick: function (time, dt) {
+    if (this.state === 'idle' || this.targets.length === 0) return;
+
+    const dtSec = dt / 1000;
+    const data  = this.data;
+    const dur   = Math.max(data.duration, 0.0001);
+
+    this.timer += dtSec;
+
+    switch (this.state) {
+      case 'delay': {
+        if (this.timer >= data.delay) {
+          this.state = 'fadeIn';
+          this.fadeStartOpacity = data.from;
+          this.timer = 0;
+        }
+        break;
+      }
+
+      case 'fadeIn': {
+        const p = Math.min(this.timer / dur, 1);
+        const v = THREE.MathUtils.lerp(this.fadeStartOpacity, data.to, p);
+        this._setOpacityAll(v);
+
+        if (p >= 1) {
+          this.timer = 0;
+          if (data.hold > 0) {
+            this.state = 'hold';
+          } else {
+            this.state = 'idle';
+          }
+        }
+        break;
+      }
+
+      case 'hold': {
+        if (this.timer >= data.hold) {
+          this.state = 'fadeOut';
+          this.fadeStartOpacity = this.lastOpacity; // should be ~data.to
+          this.timer = 0;
+        }
+        break;
+      }
+
+      case 'fadeOut': {
+        const p = Math.min(this.timer / dur, 1);
+        const v = THREE.MathUtils.lerp(this.fadeStartOpacity, data.from, p);
+        this._setOpacityAll(v);
+
+        if (p >= 1) {
+          this.state = 'idle';
+        }
+        break;
+      }
+    }
+  }
+});
+
+</script>
+
+<!-- Export Scene Module: export scene with lines in VR Mode-->
 <script type="module">
   import * as THREE from 'https://unpkg.com/three@0.173.0/build/three.module.js';
   import { GLTFExporter } from 'https://unpkg.com/three@0.173.0/examples/jsm/exporters/GLTFExporter.js';
@@ -386,7 +573,7 @@ resizeHandle.addEventListener('pointermove', e=>{
   ['gripup','squeezeend'  ].forEach(ev=>{ left?.addEventListener(ev,onRelease); right?.addEventListener(ev,onRelease); });
 </script>
 
-<!-- Shimmer Material -->
+<!-- Shimmer Material : effect use to animate the 6 color diagram -->
 <script>
 AFRAME.registerComponent('shimmer-material', {
   schema: {
@@ -531,7 +718,7 @@ AFRAME.registerComponent('shimmer-material', {
 });
 </script>
 
-<!-- Goethe Zones script, react to rig position to set up the colour palette -->
+<!-- Goethe Zones script, react to rig's position in the 6 different color zones to set up the colour palette -->
 <script>
 AFRAME.registerComponent('goethe-zones', {
   schema: {
@@ -634,13 +821,16 @@ this.palettes = {
       }
     }
 
-    // no change
+    // no change → nothing to do
     if (activeZone === this.currentZone) return;
+
+    // tell the whole scene which zone is active
+    const name = activeZone ? activeZone.name : null;
+    this.el.emit('goethe-zone-changed', { name });
 
     // if we have a new active zone, push its palette into spatial-marker
     if (activeZone && this.palettes[activeZone.name]) {
       const palette = this.palettes[activeZone.name];
-      // A-Frame expects a comma-separated list for array schema
       const value = palette.join(',');
       rig.setAttribute('spatial-marker', 'colors', value);
       console.log('[goethe-zones] active zone:', activeZone.name);
@@ -649,7 +839,885 @@ this.palettes = {
     this.currentZone = activeZone;
   }
 });
+
 </script>
+
+<script>
+AFRAME.registerComponent('flat-override', {
+  schema: {
+    color:   { type: 'color',  default: '#ffffff' },
+    opacity: { type: 'number', default: 1 }
+  },
+
+  init() {
+    this.el.addEventListener('model-loaded', () => {
+      const mesh = this.el.getObject3D('mesh');
+      if (!mesh) return;
+
+      mesh.traverse((node) => {
+        if (!node.isMesh) return;
+
+        node.material = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(this.data.color),
+          transparent: this.data.opacity < 1,
+          opacity: this.data.opacity,
+          roughness: 0.8,
+          metalness: 0
+        });
+
+        node.material.needsUpdate = true;
+      });
+    });
+  },
+
+  update() {
+    const mesh = this.el.getObject3D('mesh');
+    if (!mesh) return;
+
+    mesh.traverse((node) => {
+      if (!node.isMesh || !node.material) return;
+
+      node.material.color.set(this.data.color);
+      node.material.opacity = this.data.opacity;
+      node.material.transparent = this.data.opacity < 1;
+    });
+  }
+});
+</script>
+
+<script>
+/* --- Gradient-textured laser shader (uses your #line texture) --- */
+AFRAME.registerShader('laser-gradient', {
+  schema: {
+    src:      { type: 'map' },
+    color:    { type: 'color', default: '#111111' },
+    opacity:  { type: 'number', default: 1.0 },
+    emissive: { type: 'number', default: 1.0 }
+  },
+
+  init: function (data) {
+    this.material = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      uniforms: {
+        map:     { value: data.src || null },
+        tint:    { value: new THREE.Color(data.color) },
+        opacity: { value: data.opacity },
+        emissive:{ value: data.emissive }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main(){
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D map;
+        uniform vec3 tint;
+        uniform float opacity;
+        uniform float emissive;
+        varying vec2 vUv;
+
+        void main(){
+          vec4 t = texture2D(map, vUv);
+
+          // Extra soft fade near the "tip" (vUv.y ~ 1 on cylinder height)
+          float tipFade = smoothstep(1.0, 0.75, vUv.y);
+
+          float a = t.a * opacity * tipFade;
+          if (a < 0.01) discard;
+
+          vec3 rgb = (t.rgb * tint) * emissive;
+          gl_FragColor = vec4(rgb, a);
+        }
+      `
+    });
+  },
+
+  update: function (data) {
+    if (!this.material) return;
+    if (data.src) this.material.uniforms.map.value = data.src;
+    this.material.uniforms.tint.value.set(data.color);
+    this.material.uniforms.opacity.value = data.opacity;
+    this.material.uniforms.emissive.value = data.emissive;
+    this.material.needsUpdate = true;
+  }
+});
+
+
+/* --- VR hand laser that clicks .clickable, with hover/click colors + zone disable --- */
+AFRAME.registerComponent('hand-laser', {
+  schema: {
+    // visuals
+    length:      { type: 'number', default: 6.0 },
+    radius:      { type: 'number', default: 0.008 },
+    yOffset:     { type: 'number', default: 0.0 },   // optional hand offset
+    opacity:     { type: 'number', default: 0.55 },
+    emissive:    { type: 'number', default: 1.2 },
+    texture:     { type: 'selector', default: '#line' },
+
+    // colors
+    colorIdle:   { type: 'color', default: '#0b0b0b' },
+    colorHover:  { type: 'color', default: '#ff7a18' },
+    colorClick:  { type: 'color', default: '#0841f0' },
+
+    // behavior
+    objects:     { type: 'string', default: '.clickable' },
+    disableInZones: { type: 'boolean', default: true }
+  },
+
+  init: function () {
+    this.sceneEl = this.el.sceneEl;
+    this.isVR = false;
+    this.zoneActive = false;
+    this.hovering = false;
+    this.pressing = false;
+    this.hitEl = null;
+
+    // Ensure raycaster exists (laser-controls usually adds one, but we enforce settings)
+    this.el.setAttribute('raycaster', `objects: ${this.data.objects}; far: ${this.data.length}; interval: 0`);
+    this.el.setAttribute('cursor', 'rayOrigin: entity; fuse: false');
+
+    // Try to kill the default laser-controls line (we’ll render our own)
+    // (laser-controls may re-add it; we keep it invisible)
+    this.el.setAttribute('line', 'opacity: 0; visible: false');
+
+    // Build the cylinder laser mesh as a child entity
+    this.laserEl = document.createElement('a-entity');
+    this.laserEl.setAttribute('visible', false);
+    this.laserEl.setAttribute('position', `0 ${this.data.yOffset} 0`);
+
+    // Cylinder is along Y by default; rotate so it points down -Z
+    this.laserEl.setAttribute('geometry', {
+      primitive: 'cylinder',
+      radius: this.data.radius,
+      height: this.data.length,
+      segmentsRadial: 18,
+      openEnded: true
+    });
+    this.laserEl.setAttribute('rotation', '90 0 0');               // now height goes along Z
+    this.laserEl.setAttribute('position', `0 ${this.data.yOffset} ${-this.data.length/2}`); // push forward
+
+    this.laserEl.setAttribute('material', {
+      shader: 'laser-gradient',
+      src: this.data.texture,
+      color: this.data.colorIdle,
+      opacity: this.data.opacity,
+      emissive: this.data.emissive
+    });
+
+    this.el.appendChild(this.laserEl);
+
+    // Raycaster hover
+    this.onIntersect = (e) => {
+      const els = (e.detail && e.detail.els) || [];
+      this.hitEl = els[0] || null;
+      this.hovering = !!this.hitEl;
+      this._applyColor();
+    };
+
+    this.onIntersectCleared = () => {
+      this.hitEl = null;
+      this.hovering = false;
+      this._applyColor();
+    };
+
+    // Controller click (Meta Touch etc.)
+    this.onDown = () => {
+      this.pressing = true;
+      this._applyColor();
+      if (this.hitEl) {
+        // forward click so your existing fade-on-event works unchanged
+        this.hitEl.emit('click');
+      }
+    };
+
+    this.onUp = () => {
+      this.pressing = false;
+      this._applyColor();
+    };
+
+    this.el.addEventListener('raycaster-intersection', this.onIntersect);
+    this.el.addEventListener('raycaster-intersection-cleared', this.onIntersectCleared);
+    this.el.addEventListener('triggerdown', this.onDown);
+    this.el.addEventListener('triggerup', this.onUp);
+
+    // VR-only visibility
+    this.onEnterVR = () => { this.isVR = true;  this._refreshEnabled(); };
+    this.onExitVR  = () => { this.isVR = false; this._refreshEnabled(); };
+
+    this.sceneEl.addEventListener('enter-vr', this.onEnterVR);
+    this.sceneEl.addEventListener('exit-vr',  this.onExitVR);
+
+    // Disable inside your painting zones (your component emits goethe-zone-changed)
+    this.onZoneChanged = (e) => {
+      if (!this.data.disableInZones) return;
+      const name = e.detail && e.detail.name;   // 'blue', 'orange', ... or null
+      this.zoneActive = !!name;                 // any zone => disable lasers
+      this._refreshEnabled();
+    };
+    this.sceneEl.addEventListener('goethe-zone-changed', this.onZoneChanged);
+
+    // Initial state
+    this._refreshEnabled();
+    this._applyColor();
+  },
+
+  remove: function () {
+    this.el.removeEventListener('raycaster-intersection', this.onIntersect);
+    this.el.removeEventListener('raycaster-intersection-cleared', this.onIntersectCleared);
+    this.el.removeEventListener('triggerdown', this.onDown);
+    this.el.removeEventListener('triggerup', this.onUp);
+
+    if (this.sceneEl) {
+      this.sceneEl.removeEventListener('enter-vr', this.onEnterVR);
+      this.sceneEl.removeEventListener('exit-vr',  this.onExitVR);
+      this.sceneEl.removeEventListener('goethe-zone-changed', this.onZoneChanged);
+    }
+  },
+
+  _refreshEnabled: function () {
+    const enabled = this.isVR && !this.zoneActive;
+
+    this.laserEl.setAttribute('visible', enabled);
+
+    // hard-disable raycaster/cursor when off (prevents accidental interactions)
+    this.el.setAttribute('raycaster', 'enabled', enabled);
+    this.el.setAttribute('cursor', 'enabled', enabled);
+
+    // keep default line invisible
+    this.el.setAttribute('line', 'opacity: 0; visible: false');
+
+    if (!enabled) {
+      this.hitEl = null;
+      this.hovering = false;
+      this.pressing = false;
+      this._applyColor();
+    }
+  },
+
+  _applyColor: function () {
+    const c = this.pressing
+      ? this.data.colorClick
+      : (this.hovering ? this.data.colorHover : this.data.colorIdle);
+
+    if (this.laserEl) {
+      this.laserEl.setAttribute('material', 'color', c);
+    }
+  }
+});
+</script>
+
+<script>
+AFRAME.registerComponent('bgm-manager', {
+  schema: {
+    src: { type: 'string' },
+    volume: { type: 'number', default: 0.75 },
+    fadeInMs: { type: 'number', default: 900 },
+    fadeOutMs: { type: 'number', default: 600 },
+    pauseWhenHidden: { type: 'boolean', default: true }
+  },
+
+  init() {
+    this.audio = null;
+
+    this.started = false;        // has user clicked Enter at least once?
+    this.enabled = true;         // user toggle on/off
+    this._fadeRAF = null;
+
+    // Track whether we should auto-resume after tab switch
+    this._wasPlayingBeforeHide = false;
+
+    // Start only when the INTRO Enter button is clicked
+    this._onEnterClickCapture = (e) => {
+      if (this.started) return;
+
+      const btn = e.target.closest?.('.intro-overlay-buttons button');
+      if (!btn) return;
+
+      this.started = true;
+      if (this.enabled) this._ensureAudioAndPlay(true);
+    };
+    document.addEventListener('click', this._onEnterClickCapture, true);
+
+    // Pause/resume when tab visibility changes
+    this._onVis = () => {
+      if (!this.data.pauseWhenHidden) return;
+      if (!this.started || !this.audio) return;
+
+      if (document.hidden) {
+        this._wasPlayingBeforeHide = this.isPlaying();
+        if (this._wasPlayingBeforeHide) this.pause(true);
+      } else {
+        if (this.enabled && this._wasPlayingBeforeHide) this.play(true);
+        this._wasPlayingBeforeHide = false;
+      }
+    };
+    document.addEventListener('visibilitychange', this._onVis);
+
+    // Extra lifecycle events (more reliable on mobile/VR)
+this._onPageHide = () => {
+  if (!this.data.pauseWhenHidden) return;
+  if (!this.started || !this.audio) return;
+  this._wasPlayingBeforeHide = this.isPlaying();
+  if (this._wasPlayingBeforeHide) this.pause(true);
+};
+
+this._onPageShow = () => {
+  if (!this.data.pauseWhenHidden) return;
+  if (!this.started || !this.audio) return;
+  if (this.enabled && this._wasPlayingBeforeHide) this.play(true);
+  this._wasPlayingBeforeHide = false;
+};
+
+// Some browsers fire these instead of visibilitychange/blur
+window.addEventListener('pagehide', this._onPageHide);
+window.addEventListener('pageshow', this._onPageShow);
+
+// Optional: modern “frozen tab” events (Chrome)
+this._onFreeze = () => this._onPageHide();
+this._onResume = () => this._onPageShow();
+document.addEventListener('freeze', this._onFreeze);
+document.addEventListener('resume', this._onResume);
+
+
+    // Also handle window blur/focus (some browsers fire these more reliably)
+    this._onBlur = () => {
+      if (!this.data.pauseWhenHidden) return;
+      if (!this.started || !this.audio) return;
+      this._wasPlayingBeforeHide = this.isPlaying();
+      if (this._wasPlayingBeforeHide) this.pause(true);
+    };
+    this._onFocus = () => {
+      if (!this.data.pauseWhenHidden) return;
+      if (!this.started || !this.audio) return;
+      if (this.enabled && this._wasPlayingBeforeHide) this.play(true);
+      this._wasPlayingBeforeHide = false;
+    };
+    window.addEventListener('blur', this._onBlur);
+    window.addEventListener('focus', this._onFocus);
+
+    // Public API for your UI button
+  window.__bgm = {
+  toggle: () => this.toggle(),
+  play: () => this.play(true),
+  pause: () => this.pause(true),
+  isOn: () => this.enabled,   // <- key fix
+  isPlaying: () => this.isPlaying()
+};
+
+  },
+
+  remove() {
+    document.removeEventListener('click', this._onEnterClickCapture, true);
+    document.removeEventListener('visibilitychange', this._onVis);
+    window.removeEventListener('blur', this._onBlur);
+    window.removeEventListener('focus', this._onFocus);
+    window.removeEventListener('pagehide', this._onPageHide);
+window.removeEventListener('pageshow', this._onPageShow);
+document.removeEventListener('freeze', this._onFreeze);
+document.removeEventListener('resume', this._onResume);
+
+    if (this._fadeRAF) cancelAnimationFrame(this._fadeRAF);
+  },
+
+  _ensureAudio() {
+    if (this.audio) return;
+
+    this.audio = new Audio(this.data.src);
+    this.audio.loop = true;
+    this.audio.preload = 'auto';
+    this.audio.volume = 0;
+  },
+
+  isPlaying() {
+    return !!(this.audio && !this.audio.paused);
+  },
+
+  async _ensureAudioAndPlay(withFade) {
+    this._ensureAudio();
+
+    // try to play
+    try {
+      await this.audio.play();
+    } catch (err) {
+      console.warn('[bgm] play blocked/failed:', err);
+      return;
+    }
+
+    if (withFade) this._fadeTo(this.data.volume, this.data.fadeInMs);
+    else this.audio.volume = this.data.volume;
+
+    this.el.sceneEl.emit('bgm-toggled', { enabled: true });
+  },
+
+  play(withFade) {
+    if (!this.started) return;         // must click Enter first
+    if (!this.enabled) return;
+
+    // If audio exists but is paused, resume it
+    if (!this.audio || this.audio.paused) {
+      this._ensureAudioAndPlay(withFade);
+      return;
+    }
+
+    // already playing, just ensure volume
+    if (withFade) this._fadeTo(this.data.volume, this.data.fadeInMs);
+    else this.audio.volume = this.data.volume;
+
+    this.el.sceneEl.emit('bgm-toggled', { enabled: true });
+  },
+
+  pause(withFade) {
+    if (!this.audio || this.audio.paused) return;
+
+    if (withFade) {
+      this._fadeTo(0, this.data.fadeOutMs, () => this.audio.pause());
+    } else {
+      this.audio.volume = 0;
+      this.audio.pause();
+    }
+
+    this.el.sceneEl.emit('bgm-toggled', { enabled: false });
+  },
+
+  toggle() {
+    // If user never clicked Enter, ignore toggle (or you can store intent)
+    if (!this.started) {
+      this.enabled = !this.enabled;
+      this.el.sceneEl.emit('bgm-toggled', { enabled: this.enabled });
+      return;
+    }
+
+    this.enabled = !this.enabled;
+
+    if (this.enabled) this.play(true);
+    else this.pause(true);
+
+    this.el.sceneEl.emit('bgm-toggled', { enabled: this.enabled });
+  },
+
+  _fadeTo(target, ms, done) {
+    if (!this.audio) return;
+    if (this._fadeRAF) cancelAnimationFrame(this._fadeRAF);
+
+    const a = this.audio;
+    const from = a.volume;
+    const start = performance.now();
+    const dur = Math.max(1, ms);
+
+    const step = (now) => {
+      const t = Math.min((now - start) / dur, 1);
+      const s = t * t * (3 - 2 * t);
+      a.volume = from + (target - from) * s;
+
+      if (t < 1) this._fadeRAF = requestAnimationFrame(step);
+      else {
+        this._fadeRAF = null;
+        done && done();
+      }
+    };
+
+    this._fadeRAF = requestAnimationFrame(step);
+  }
+});
+</script>
+
+
+  </head>
+
+  <body>
+    <div id="ui-topright">
+  <button id="btn-music" class="ui-circle" aria-label="Toggle music" title="Music">
+    <span id="icon-music"></span>
+  </button>
+</div>
+
+<style>
+#ui-topright{
+  position:fixed; top:16px; right:16px; z-index:9999;
+}
+.ui-circle{
+  width:44px; height:44px; border-radius:999px;
+  border:1px solid rgba(0,0,0,.15);
+  background: rgba(255,255,255,.8);
+  backdrop-filter: blur(6px);
+  display:grid; place-items:center;
+  cursor:pointer;
+}
+.ui-circle svg{ width:22px; height:22px; display:block; }
+</style>
+
+<script>
+const ICON_PLAY = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M11.596 8.697 6.214 11.96A.5.5 0 0 1 5.5 11.53V4.47a.5.5 0 0 1 .714-.43l5.382 3.263a.5.5 0 0 1 0 .894z"/></svg>`;
+const ICON_PAUSE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 3.5A.5.5 0 0 1 6 4v8a.5.5 0 0 1-1 0V4a.5.5 0 0 1 .5-.5zm5 0A.5.5 0 0 1 11 4v8a.5.5 0 0 1-1 0V4a.5.5 0 0 1 .5-.5z"/></svg>`;
+
+function refreshMusicIcon(){
+  const on = window.__bgm?.isOn?.() ?? false;
+  document.getElementById('icon-music').innerHTML = on ? ICON_PAUSE : ICON_PLAY;
+}
+document.getElementById('btn-music').addEventListener('click', ()=>{
+  window.__bgm?.toggle?.();
+  refreshMusicIcon();
+});
+function bindBgmIconToScene(){
+  const scene = document.querySelector('a-scene');
+  if (!scene) return false;
+  scene.addEventListener('bgm-toggled', refreshMusicIcon);
+  refreshMusicIcon();
+  return true;
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  // Try now, and if scene isn't there yet, retry a few times.
+  if (bindBgmIconToScene()) return;
+  let tries = 0;
+  const t = setInterval(() => {
+    tries++;
+    if (bindBgmIconToScene() || tries > 50) clearInterval(t);
+  }, 50);
+});
+
+</script>
+
+    <a-scene 
+    light="defaultLightsEnabled: false" 
+    background="color: #ffffff" 
+    renderer="colorManagement: true; physicallyCorrectLights: true" 
+    goethe-zones="rig: #rig"  
+    bgm-manager="src: assets/goethe-colors/Liszt_Liebstraum_No3_CC0.mp3;
+               volume: 0.75;
+               fadeInMs: 900;
+               fadeOutMs: 600;
+               pauseWhenHidden: true"
+    intro-overlay="
+   backgroundColor: #ffffff;
+    textColor: #000000;
+    fontFamily: system-ui;
+    fontSize: 1.1rem;
+
+    lang1Code: en;
+    lang2Code: fr;
+    buttonLabel1: Enter;
+    buttonLabel2: Entrer;
+    loadingText1: Loading assets…;
+    loadingText2: Chargement des éléments…;
+
+    charSpeed: 55;         
+    lineGap: 300;         
+    imageFadeDuration: 2000;
+
+    text1:
+a poet, scientist and philosopher came to a long work on colours, <br>
+he studied light, pigments, paintings, psychology... <br>
+<br>
+And he made his 'Color Theory', as a wide set of reflections and ideas.<br>
+There he drafted a purely 'intuitive' diagram <br> 
+<br> 
+➔ on a possible meaning of colours<br>
+
+
+;
+text2:un poète, scientifique et philosophe a longuement réfléchi sur les couleurs, <br>
+il a étudié la lumière, les pigments, la peinture, la psychologie… <br>
+<br>
+Et il a écrit sa « Théorie des couleurs », un ensemble vaste d’idées et de réflexions. <br>
+Il y a dessiné un diagramme particulier, une intuition 
+➔ la signification possible des couleurs.<br>;
+
+  
+
+    lang1Code: en;
+    lang2Code: fr;
+    buttonLabel1: Enter;
+    buttonLabel2: Entrer;
+    loadingText1: Chargement des éléments…;
+    loadingText2: Loading assets…;
+  ">
+
+  <a-assets>
+
+    <img id="line" src="assets/goethe-colors/Line.png">
+
+   <a-asset-item id="env" src="assets/goethe-colors/env-goethe.glb"></a-asset-item>
+   <a-asset-item id="navmesh" src="assets/goethe-colors/navmesh-env.glb"></a-asset-item>
+   <a-asset-item id="table" src="assets/goethe-colors/table.glb"></a-asset-item>
+   <img id="diagram" src="assets/goethe-colors/upscale-diagram_png512.png">
+   <a-asset-item id="goethe" src="assets/goethe-colors/goethe.glb"></a-asset-item>
+   <a-asset-item id="book" src="assets/goethe-colors/Theory-Book.glb"></a-asset-item>
+    
+     <a-asset-item id="navmesh-blue" src="assets/goethe-colors/navmesh-blue.glb"></a-asset-item>
+     <a-asset-item id="navmesh-green" src="assets/goethe-colors/navmesh-green.glb"></a-asset-item>
+     <a-asset-item id="navmesh-indigo" src="assets/goethe-colors/navmesh-indigo.glb"></a-asset-item>
+     <a-asset-item id="navmesh-orange" src="assets/goethe-colors/navmesh-orange.glb"></a-asset-item>
+     <a-asset-item id="navmesh-red" src="assets/goethe-colors/navmesh-red.glb"></a-asset-item>
+     <a-asset-item id="navmesh-yellow" src="assets/goethe-colors/navmesh-yellow.glb"></a-asset-item>
+
+     <a-asset-item id="interactable-blue" src="assets/goethe-colors/interactable/interactable-blue.glb"></a-asset-item>
+     <a-asset-item id="interactable-green" src="assets/goethe-colors/interactable/interactable-green.glb"></a-asset-item>
+     <a-asset-item id="interactable-indigo" src="assets/goethe-colors/interactable/interactable-indigo.glb"></a-asset-item>
+     <a-asset-item id="interactable-orange" src="assets/goethe-colors/interactable/interactable-orange.glb"></a-asset-item>
+     <a-asset-item id="interactable-red" src="assets/goethe-colors/interactable/interactable-red.glb"></a-asset-item>
+     <a-asset-item id="interactable-yellow" src="assets/goethe-colors/interactable/interactable-yellow.glb"></a-asset-item>
+
+    <a-asset-item id="element-blue" src="assets/goethe-colors/elements/blue-element.glb"></a-asset-item>
+    <a-asset-item id="element-green" src="assets/goethe-colors/elements/green-element.glb"></a-asset-item>
+    <a-asset-item id="element-indigo" src="assets/goethe-colors/elements/indigo-element.glb"></a-asset-item>
+    <a-asset-item id="element-orange" src="assets/goethe-colors/elements/orange-element.glb"></a-asset-item>
+    <a-asset-item id="element-red" src="assets/goethe-colors/elements/red-element.glb"></a-asset-item>
+    <a-asset-item id="element-yellow" src="assets/goethe-colors/elements/yellow-element.glb"></a-asset-item>
+
+    <a-asset-item id="text1" src="assets/goethe-colors/texts-maker/text-JWGoether.glb"></a-asset-item>
+    <a-asset-item id="text2" src="assets/goethe-colors/texts-maker/text-diagram.glb"></a-asset-item>
+    <a-asset-item id="text3" src="assets/goethe-colors/texts-maker/text-theory.glb"></a-asset-item>
+
+    <a-asset-item id="edel" src="assets/goethe-colors/words compressed/Edel.glb"></a-asset-item>
+    <a-asset-item id="gemein" src="assets/goethe-colors/words compressed/Gemein.glb"></a-asset-item>
+    <a-asset-item id="gut" src="assets/goethe-colors/words compressed/Gut.glb"></a-asset-item>
+    <a-asset-item id="nuztlich" src="assets/goethe-colors/words compressed/Nuztlich.glb"></a-asset-item>
+    <a-asset-item id="phantasie" src="assets/goethe-colors/words compressed/phantasie.glb"></a-asset-item>
+    <a-asset-item id="schon" src="assets/goethe-colors/words compressed/Schon.glb"></a-asset-item>
+    <a-asset-item id="verstand" src="assets/goethe-colors/words compressed/Verstand.glb"></a-asset-item>
+    <a-asset-item id="sinnlichkeit" src="assets/goethe-colors/words compressed/sinnlichkeit.glb"></a-asset-item>
+    <a-asset-item id="unnothig" src="assets/goethe-colors/words compressed/unnothig.glb"></a-asset-item>
+    <a-asset-item id="vernunft" src="assets/goethe-colors/words compressed/Vernunft.glb"></a-asset-item>
+
+    <audio id="bgm" src="assets/goethe-colors/Liszt_Liebstraum_No3_CC0.mp3" preload="auto" loop crossorigin="anonymous"></audio>
+
+  </a-assets>
+
+          <!-- PC & VR Rig -->
+<a-entity id="rig" 
+spatial-marker
+movement-controls="constrainToNavMesh: true ; speed : 0.5; controls: keyboard; enabled:true"  
+position="-0.8 0 3.6" rotation="0 -20 0"
+simple-navmesh-constraint="navmesh:.navmesh;fall:0;height:0;exclude:.navmesh-hole; "
+cursor="rayOrigin: mouse"
+raycaster="objects: .clickable">
+
+      <a-box camera="far: 700; fov: 55; near: 0.1; active: true" position="0 1.7 0" visible="false" ></a-box>
+      <a-entity id="left-hand"
+          laser-controls="hand: left"
+          hand-laser="texture: #line;
+                      colorIdle: #0b0b0b;
+                      colorHover: #ff7a18;
+                      colorClick: #0841f0;
+                      opacity: 0.55;
+                      emissive: 1.2;
+                      length: 6;
+                      radius: 0.008;">
+</a-entity>
+
+<a-entity id="right-hand"
+          laser-controls="hand: right"
+          hand-laser="texture: #line;
+                      colorIdle: #0b0b0b;
+                      colorHover: #ff7a18;
+                      colorClick: #0841f0;
+                      opacity: 0.55;
+                      emissive: 1.2;
+                      length: 6;
+                      radius: 0.008;">
+</a-entity>
+
+</a-entity>
+
+ <!-- Sky -->
+<a-sky radius="200" theta-length="110" class="environment" material="shader: skyshader; blending: none; anisotropy: 1.04; turbidity: 20; mieCoefficient: 0.1; mieDirectionalG: 0.72; sunPosition: -0.10389385923870163 0.9444896294427422 0.31168157771610494"></a-sky>
+  
+<!-- Lights -->
+
+<a-entity light="intensity: 1; type: ambient"></a-entity>
+<a-entity light="intensity: 1.884; castShadow: true; shadowBias: -0.0002; shadowCameraFov: 0; shadowCameraNear: -2.47; shadowCameraTop: 8.11; shadowCameraRight: 7.68; shadowCameraBottom: -12.3; shadowCameraLeft: -11.9" position="-0.49743 2.96771 1.19041" data-aframe-default-light="" aframe-injected=""></a-entity>
+<a-entity light="intensity: 1.5; type: point" position="0 1.88667 0"></a-entity>
+
+<!-- Scene Environement -->
+<a-entity gltf-model="#env" rotation="0 -90 0" position="0 0 0" shadow=""></a-entity>
+<a-entity gltf-model="#navmesh" rotation="0 -90 0" position="0 0 0" visible="false" class="navmesh"></a-entity>
+<a-entity geometry="primitive: ring; radiusInner: 0.6" rotation="90 -9.55 0" position="0 3.5593 0" scale="6.1595 6.1595 6.1595" shadow="" id="extra-light-hidder"></a-entity>
+
+<!-- Goethe's bust + diagram + table -->  
+<a-entity id="goethe-bust" gltf-model="assets/goethe-colors/goethe.glb" rotation="0 -90 0" position="-0.00814 0.12423 0.01031" shadow="" class="clickable" gradient-color="color1: #0841f0; color3: #ff0000; color5: #37005c; color6: #ff4000; colorCount: 4; marbleMix: 0.16; roughness: 0.7; metalness: 1; speed: 0.7; originalMix: 0.94" fade-on-event="targets: #goethe-text; duration: 3; hold: 5; group: goetheTexts">
+</a-entity>
+
+<!-- Diagram plane → diagram text -->
+<a-entity id="diagram-element"
+          material="transparent: true; src: #diagram"
+          geometry="primitive: plane"
+          rotation="-90.00021045914971 62.589336582296 0"
+          position="-0.03296 0.81397 0"
+          shimmer-material="shimmerIntensity: 1.5"
+          class="clickable"
+          scale="1.12054 1.12054 1.12054"
+          fade-on-event="targets: #diagram-text;
+                         duration: 3;
+                         hold: 5;
+                         from: 0;
+                         to: 1;
+                         group: goetheTexts">
+</a-entity>
+
+<!-- Goethe book → theory text -->
+<a-entity id="goethe-book"
+          gltf-model="assets/goethe-colors/Theory-Book.glb"
+          rotation="0 -90 0"
+          position="-0.00824 0.10229 0"
+          scale="1 0.87903 1"
+          shadow=""
+          class="clickable"
+          gradient-color="color1: #bfbfbf; color2: #707070; color3: #787878; color4: #b5b5b5; color5: #ebebeb; color6: #a9b181; colorCount: 3; roughness: 0; metalness: 1; speed: 0.1; originalMix: 0"
+          fade-on-event="targets: #theory-text;
+                         duration: 3;
+                         hold: 5;
+                         from: 0;
+                         to: 1;
+                         group: goetheTexts">
+</a-entity>
+
+
+
+<a-entity gltf-model="#table" rotation="0 -90 0" position="0 0 0" visible="true"></a-entity>
+
+
+
+     <!-- navmeshs -->
+
+<!-- ORANGE -->
+<a-entity id="navmesh-orange"
+          gltf-model="#navmesh-orange"
+          rotation="0 -90 0"
+          position="0 0 0"
+          class="drawingArea navmesh"
+          visible="false"
+          area-fade-gradient="target: #element-orange-area; zone: orange; maxOpacity: 1; minOpacity: 0.04; speed: 1">
+</a-entity>
+
+<!-- BLUE -->
+<a-entity id="navmesh-blue"
+          gltf-model="#navmesh-blue"
+          rotation="0 -90 0"
+          position="0 0 0"
+          class="drawingArea navmesh"
+          visible="false"
+          area-fade-gradient="target: #element-blue-area; zone: blue; maxOpacity: 1; minOpacity: 0.04; speed: 1">
+</a-entity>
+
+<!-- RED -->
+<a-entity id="navmesh-red"
+          gltf-model="#navmesh-red"
+          rotation="0 -90 0"
+          position="0 0 0"
+          class="drawingArea navmesh"
+          visible="false"
+          area-fade-gradient="target: #element-red-area; zone: red; maxOpacity: 1; minOpacity: 0.04; speed: 1">
+</a-entity>
+
+<!-- YELLOW -->
+<a-entity id="navmesh-yellow"
+          gltf-model="#navmesh-yellow"
+          rotation="0 -90 0"
+          position="0 0 0"
+          class="drawingArea navmesh"
+          visible="false"
+          area-fade-gradient="target: #element-yellow-area; zone: yellow; maxOpacity: 1; minOpacity: 0.04; speed: 1">
+</a-entity>
+
+<!-- GREEN -->
+<a-entity id="navmesh-green"
+          gltf-model="#navmesh-green"
+          rotation="0 -90 0"
+          position="0 0 0"
+          class="drawingArea navmesh"
+          visible="false"
+          area-fade-gradient="target: #element-green-area; zone: green; maxOpacity: 1; minOpacity: 0.04; speed: 1">
+</a-entity>
+
+<!-- VIOLET / INDIGO -->
+<a-entity id="navmesh-indigo"
+          gltf-model="#navmesh-indigo"
+          rotation="0 -90 0"
+          position="0 0 0"
+          class="drawingArea navmesh"
+          visible="false"
+          area-fade-gradient="target: #element-violet-area; zone: indigo; maxOpacity: 1; minOpacity: 0.04; speed: 1">
+</a-entity>
+
+
+  <!-- interactable -->
+<a-entity id="btn-blue" gltf-model="#interactable-blue" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
+<a-entity id="btn-green" gltf-model="#interactable-green" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
+<a-entity id="btn-indigo" gltf-model="#interactable-indigo" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
+<a-entity id="btn-orange" gltf-model="#interactable-orange" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
+<a-entity id="btn-red" gltf-model="#interactable-red" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
+<a-entity id="btn-yellow" gltf-model="#interactable-yellow" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
+
+
+<!-- drawing space elements -->
+<!-- Orange Area -->
+<a-entity id="element-orange-area"
+          gltf-model="#element-orange"
+          rotation="0 -90 0"
+          position="0 0 0"
+          gradient-color="roughness: 0; color1: #ffffff; color2: #fff1e5; marbleMix: 0.1; opacity: 0; metalness: 1">
+</a-entity>
+
+<!-- Blue Area -->
+<a-entity id="element-blue-area"
+          gltf-model="#element-blue"
+          rotation="0 -90 0"
+          position="0 0 0"
+          gradient-color="color1: #ffffff; color2: #b6c1cd; roughness: 0; opacity: 0">
+</a-entity>
+
+<!-- Red Area -->
+<a-entity id="element-red-area" gltf-model="assets/goethe-colors/elements/red-element.glb" rotation="0 -90 0" position="0 0.16267 0" gradient-color="color1: #ffffff; color2: #fff5f5; opacity: 0.1">
+</a-entity>
+
+<!-- Yellow Area -->
+<a-entity id="element-yellow-area"
+          gltf-model="#element-yellow"
+          rotation="0 -90 0"
+          position="0 0 0"
+          gradient-color="color1: #ffffff; color2: #eae6d2; opacity: 0; metalness: 1; roughness: 0; marbleMix: 0.1">
+</a-entity>
+
+<!-- Green Area -->
+<a-entity id="element-green-area"
+          gltf-model="#element-green"
+          rotation="0 -90 0"
+          position="0 0 0"
+          gradient-color="color1: #ffffff; color2: #f0fff0; opacity: 0">
+</a-entity>
+
+<!-- Violet Area -->
+<a-entity id="element-violet-area"
+          gltf-model="#element-indigo"
+          rotation="0 -90 0"
+          position="0 0 0"
+          gradient-color="color1: #ffffff; color2: #8b8494; roughness: 0; marbleMix: 0.1; opacity: 0">
+</a-entity>
+
+
+<!-- Marker-Texts -->
+<a-entity id="goethe-text" gltf-model="#text1" position="0.02691 1.816 -1.09926" scale="1.5 1.5 1.5" opacity="0" flat-override="color: #000000"></a-entity>
+<a-entity id="diagram-text" gltf-model="#text2" position="0.02691 1.816 -1.09926" scale="1.5 1.5 1.5" opacity="0" flat-override="color: #000000"></a-entity>
+<a-entity id="theory-text" gltf-model="#text3" position="0.02691 1.816 -1.09926" scale="1.5 1.5 1.5" opacity="0" flat-override="color: #000000"></a-entity>
+
+<a-entity id="edel" gltf-model="#edel" position="-0.37194 2.28755 -6.13326" flat-override="opacity: 0.52" scale="0.75 0.75 0.75"></a-entity>
+<a-entity id="gut" gltf-model="#gut" position="5.49982 2.42192 -3.10054" flat-override="opacity: 0.52" scale="0.75 0.75 0.75" rotation="0 -71.5990979107282 0"></a-entity>
+<a-entity id="nuztlich" gltf-model="#nuztlich" position="4.97181 2.28755 2.96997" flat-override="opacity: 0.52" scale="0.75 0.75 0.75" rotation="0 -126.8201972476418 0"></a-entity>
+<a-entity id="gemein" gltf-model="#gemein" position="-0.10445 2.28755 6.31301" flat-override="opacity: 0.52" scale="0.75 0.75 0.75" rotation="0 180 0"></a-entity>
+<a-entity id="unnothig" gltf-model="#unnothig" position="-5.21878 2.28755 3.2757" flat-override="opacity: 0.52" scale="0.75 0.75 0.75" rotation="0 126.22317522511548 0"></a-entity>
+<a-entity id="schon" gltf-model="#schon" position="-5.45174 2.28755 -3.07225" flat-override="opacity: 0.52" scale="0.75 0.75 0.75" rotation="0 60.677376419944444 0"></a-entity>
+<a-entity id="verstand" gltf-model="#verstand" position="3.23791 -0.03986 -0.62757" flat-override="opacity: 0.2" rotation="-53.44607608759832 -70.61074571412753 0"></a-entity>
+<a-entity id="sinnlichkeit" gltf-model="#sinnlichkeit" position="1.12832 0.17646 2.8613" flat-override="opacity: 0.2" rotation="-52.5980985508047 -158.30422809008053 4.646687718510977"></a-entity>
+<a-entity id="phantasie" gltf-model="#phantasie" position="-3.18411 0.25267 0.40501" flat-override="opacity: 0.2" rotation="-70.0079941136499 94.2475465944545 11.106213900815877"></a-entity>
+<a-entity id="vernunft" gltf-model="#vernunft" position="-1.32109 0.22329 -2.73259" flat-override="opacity: 0.2" rotation="-65.7698253030672 21.4790418238643 8.341692539309655"></a-entity>
+
+</a-scene>
+
 
 
   </body>
