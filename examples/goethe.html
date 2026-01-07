@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Goethe's Theory of Colours</title>
+    <title>Goethe's Theory of Colors</title>
     <meta name="description" content="A demo of the Spatial-Marker component">
     
     <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
@@ -11,12 +11,14 @@
     <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.6.0/dist/aframe-extras.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/AdaRoseCannon/aframe-xr-boilerplate/simple-navmesh-constraint.js"></script>
     <script src="https://unpkg.com/aframe-environment-component@1.5.x/dist/aframe-environment-component.min.js"></script>
-    <script src="animate-gradient.js"></script>
-
+    <script src="gradient-color.js"></script>
     <script src="intro-overlay.js" ></script>
 
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="github.css">
+
 <!-- Fades in glb models when the user is in a defined color zone -->
-  <script>
+<script>
 AFRAME.registerComponent('area-fade-gradient', {
   schema: {
     target:     { type: 'selector' },         // GLB with gradient-color
@@ -84,7 +86,7 @@ AFRAME.registerComponent('area-fade-gradient', {
   
 });
 
-  </script>
+</script>
 
 <!-- Fade on Event: fades-in and out the three info texts when clicking a defined object-->
 <script>
@@ -718,7 +720,7 @@ AFRAME.registerComponent('shimmer-material', {
 });
 </script>
 
-<!-- Goethe Zones script, react to rig's position in the 6 different color zones to set up the colour palette -->
+<!-- Goethe Zones script, react to rig's position in the 6 different color zones to set up the color palette -->
 <script>
 AFRAME.registerComponent('goethe-zones', {
   schema: {
@@ -842,6 +844,7 @@ this.palettes = {
 
 </script>
 
+<!-- Flat-override component : sets opacity for written texts -->
 <script>
 AFRAME.registerComponent('flat-override', {
   schema: {
@@ -885,6 +888,7 @@ AFRAME.registerComponent('flat-override', {
 });
 </script>
 
+<!-- VR Gradient for laser -->
 <script>
 /* --- Gradient-textured laser shader (uses your #line texture) --- */
 AFRAME.registerShader('laser-gradient', {
@@ -1110,25 +1114,19 @@ AFRAME.registerComponent('hand-laser', {
 });
 </script>
 
+<!-- Background Music Manager -->
 <script>
 AFRAME.registerComponent('bgm-manager', {
   schema: {
     src: { type: 'string' },
-    volume: { type: 'number', default: 0.75 },
-    fadeInMs: { type: 'number', default: 900 },
-    fadeOutMs: { type: 'number', default: 600 },
-    pauseWhenHidden: { type: 'boolean', default: true }
+    volume: { type: 'number', default: 0.5 }
   },
 
   init() {
     this.audio = null;
 
-    this.started = false;        // has user clicked Enter at least once?
-    this.enabled = true;         // user toggle on/off
-    this._fadeRAF = null;
-
-    // Track whether we should auto-resume after tab switch
-    this._wasPlayingBeforeHide = false;
+    this.started = false;   // user clicked Enter at least once
+    this.enabled = true;    // user toggle intent
 
     // Start only when the INTRO Enter button is clicked
     this._onEnterClickCapture = (e) => {
@@ -1138,89 +1136,22 @@ AFRAME.registerComponent('bgm-manager', {
       if (!btn) return;
 
       this.started = true;
-      if (this.enabled) this._ensureAudioAndPlay(true);
+      if (this.enabled) this._ensureAudioAndPlay();
     };
     document.addEventListener('click', this._onEnterClickCapture, true);
 
-    // Pause/resume when tab visibility changes
-    this._onVis = () => {
-      if (!this.data.pauseWhenHidden) return;
-      if (!this.started || !this.audio) return;
-
-      if (document.hidden) {
-        this._wasPlayingBeforeHide = this.isPlaying();
-        if (this._wasPlayingBeforeHide) this.pause(true);
-      } else {
-        if (this.enabled && this._wasPlayingBeforeHide) this.play(true);
-        this._wasPlayingBeforeHide = false;
-      }
-    };
-    document.addEventListener('visibilitychange', this._onVis);
-
-    // Extra lifecycle events (more reliable on mobile/VR)
-this._onPageHide = () => {
-  if (!this.data.pauseWhenHidden) return;
-  if (!this.started || !this.audio) return;
-  this._wasPlayingBeforeHide = this.isPlaying();
-  if (this._wasPlayingBeforeHide) this.pause(true);
-};
-
-this._onPageShow = () => {
-  if (!this.data.pauseWhenHidden) return;
-  if (!this.started || !this.audio) return;
-  if (this.enabled && this._wasPlayingBeforeHide) this.play(true);
-  this._wasPlayingBeforeHide = false;
-};
-
-// Some browsers fire these instead of visibilitychange/blur
-window.addEventListener('pagehide', this._onPageHide);
-window.addEventListener('pageshow', this._onPageShow);
-
-// Optional: modern “frozen tab” events (Chrome)
-this._onFreeze = () => this._onPageHide();
-this._onResume = () => this._onPageShow();
-document.addEventListener('freeze', this._onFreeze);
-document.addEventListener('resume', this._onResume);
-
-
-    // Also handle window blur/focus (some browsers fire these more reliably)
-    this._onBlur = () => {
-      if (!this.data.pauseWhenHidden) return;
-      if (!this.started || !this.audio) return;
-      this._wasPlayingBeforeHide = this.isPlaying();
-      if (this._wasPlayingBeforeHide) this.pause(true);
-    };
-    this._onFocus = () => {
-      if (!this.data.pauseWhenHidden) return;
-      if (!this.started || !this.audio) return;
-      if (this.enabled && this._wasPlayingBeforeHide) this.play(true);
-      this._wasPlayingBeforeHide = false;
-    };
-    window.addEventListener('blur', this._onBlur);
-    window.addEventListener('focus', this._onFocus);
-
     // Public API for your UI button
-  window.__bgm = {
-  toggle: () => this.toggle(),
-  play: () => this.play(true),
-  pause: () => this.pause(true),
-  isOn: () => this.enabled,   // <- key fix
-  isPlaying: () => this.isPlaying()
-};
-
+    window.__bgm = {
+      toggle: () => this.toggle(),
+      play: () => this.play(),
+      pause: () => this.pause(),
+      isOn: () => this.enabled,          // UI intent
+      isPlaying: () => this.isPlaying()
+    };
   },
 
   remove() {
     document.removeEventListener('click', this._onEnterClickCapture, true);
-    document.removeEventListener('visibilitychange', this._onVis);
-    window.removeEventListener('blur', this._onBlur);
-    window.removeEventListener('focus', this._onFocus);
-    window.removeEventListener('pagehide', this._onPageHide);
-window.removeEventListener('pageshow', this._onPageShow);
-document.removeEventListener('freeze', this._onFreeze);
-document.removeEventListener('resume', this._onResume);
-
-    if (this._fadeRAF) cancelAnimationFrame(this._fadeRAF);
   },
 
   _ensureAudio() {
@@ -1229,17 +1160,16 @@ document.removeEventListener('resume', this._onResume);
     this.audio = new Audio(this.data.src);
     this.audio.loop = true;
     this.audio.preload = 'auto';
-    this.audio.volume = 0;
+    this.audio.volume = 0; // start silent until play succeeds
   },
 
   isPlaying() {
     return !!(this.audio && !this.audio.paused);
   },
 
-  async _ensureAudioAndPlay(withFade) {
+  async _ensureAudioAndPlay() {
     this._ensureAudio();
 
-    // try to play
     try {
       await this.audio.play();
     } catch (err) {
@@ -1247,109 +1177,486 @@ document.removeEventListener('resume', this._onResume);
       return;
     }
 
-    if (withFade) this._fadeTo(this.data.volume, this.data.fadeInMs);
-    else this.audio.volume = this.data.volume;
-
+    this.audio.volume = this.data.volume;
     this.el.sceneEl.emit('bgm-toggled', { enabled: true });
   },
 
-  play(withFade) {
-    if (!this.started) return;         // must click Enter first
+  play() {
+    if (!this.started) return;
     if (!this.enabled) return;
 
-    // If audio exists but is paused, resume it
     if (!this.audio || this.audio.paused) {
-      this._ensureAudioAndPlay(withFade);
+      this._ensureAudioAndPlay();
       return;
     }
 
-    // already playing, just ensure volume
-    if (withFade) this._fadeTo(this.data.volume, this.data.fadeInMs);
-    else this.audio.volume = this.data.volume;
-
+    this.audio.volume = this.data.volume;
     this.el.sceneEl.emit('bgm-toggled', { enabled: true });
   },
 
-  pause(withFade) {
+  pause() {
     if (!this.audio || this.audio.paused) return;
 
-    if (withFade) {
-      this._fadeTo(0, this.data.fadeOutMs, () => this.audio.pause());
-    } else {
-      this.audio.volume = 0;
-      this.audio.pause();
-    }
+    this.audio.volume = 0;
+    this.audio.pause();
 
     this.el.sceneEl.emit('bgm-toggled', { enabled: false });
   },
 
   toggle() {
-    // If user never clicked Enter, ignore toggle (or you can store intent)
+    // Allow toggling intent even before Enter
+    this.enabled = !this.enabled;
+
     if (!this.started) {
-      this.enabled = !this.enabled;
       this.el.sceneEl.emit('bgm-toggled', { enabled: this.enabled });
       return;
     }
 
-    this.enabled = !this.enabled;
-
-    if (this.enabled) this.play(true);
-    else this.pause(true);
+    if (this.enabled) this.play();
+    else this.pause();
 
     this.el.sceneEl.emit('bgm-toggled', { enabled: this.enabled });
-  },
-
-  _fadeTo(target, ms, done) {
-    if (!this.audio) return;
-    if (this._fadeRAF) cancelAnimationFrame(this._fadeRAF);
-
-    const a = this.audio;
-    const from = a.volume;
-    const start = performance.now();
-    const dur = Math.max(1, ms);
-
-    const step = (now) => {
-      const t = Math.min((now - start) / dur, 1);
-      const s = t * t * (3 - 2 * t);
-      a.volume = from + (target - from) * s;
-
-      if (t < 1) this._fadeRAF = requestAnimationFrame(step);
-      else {
-        this._fadeRAF = null;
-        done && done();
-      }
-    };
-
-    this._fadeRAF = requestAnimationFrame(step);
   }
 });
 </script>
 
-
   </head>
 
   <body>
-    <div id="ui-topright">
+
+
+  <div id="ui-topright">
   <button id="btn-music" class="ui-circle" aria-label="Toggle music" title="Music">
     <span id="icon-music"></span>
   </button>
 </div>
 
-<style>
-#ui-topright{
-  position:fixed; top:16px; right:16px; z-index:9999;
-}
-.ui-circle{
-  width:44px; height:44px; border-radius:999px;
-  border:1px solid rgba(0,0,0,.15);
-  background: rgba(255,255,255,.8);
-  backdrop-filter: blur(6px);
-  display:grid; place-items:center;
-  cursor:pointer;
-}
-.ui-circle svg{ width:22px; height:22px; display:block; }
-</style>
+<a class="github-fab"
+   href="https://github.com/rpetitjean/spatial-marker/blob/main/examples/goethe.html"
+   target="_blank"
+   rel="noopener noreferrer"
+   aria-label="Open source code on GitHub">
+  <span class="gh-dot" aria-hidden="true"></span>
+  <span class="gh-label">Source</span>
+</a>
 
+<!-- Info Pop-up  -->
+<script>
+(() => {
+  /* =========================
+     1) LANGUAGE (intro-overlay storage + browser fallback + toggle)
+     ========================= */
+
+  const LANGS = { EN: 'en', FR: 'fr' };
+  const INTRO_STORAGE_KEY = 'intro-lang'; // MUST match intro-overlay storageKey
+
+  function browserPrefLang() {
+    const prefs = (navigator.languages && navigator.languages.length)
+      ? navigator.languages
+      : [navigator.language || 'en'];
+    const first = String(prefs[0] || '').toLowerCase();
+    return first.startsWith('fr') ? LANGS.FR : LANGS.EN;
+  }
+
+  function storedIntroLang() {
+    try {
+      const stored = localStorage.getItem(INTRO_STORAGE_KEY);
+      if (!stored) return null;
+      const lc = String(stored).toLowerCase();
+      return lc.startsWith('fr') ? LANGS.FR : LANGS.EN;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function syncLangFromIntroStorageOrBrowser() {
+    currentLang = storedIntroLang() || browserPrefLang();
+  }
+
+  // initial guess (will be re-synced later anyway)
+  let currentLang = storedIntroLang() || browserPrefLang();
+
+  /* =========================
+     2) CONTENT (EN / FR)
+     ========================= */
+
+  const CONTENT = {
+    en: {
+      infoBtn: 'Info',
+      toggleLabel: 'FR / EN',
+      menuTitleHTML: `
+        This
+        <a href="https://immersiveweb.dev/" target="_blank" rel="noopener noreferrer">WebXR</a>
+        experience was created with
+        <a href="https://aframe.io/" target="_blank" rel="noopener noreferrer">A-Frame</a>
+        to highlight some fun that can be made with the
+        <a href="https://github.com/rpetitjean/spatial-marker" target="_blank" rel="noopener noreferrer">Spatial-Marker component</a>,
+        and it also opens ideas by Goethe on colors with music by Franz Liszt.
+      `,
+      back: '←',
+      pages: {
+        vr:     { title: 'Video', text: ``, hideImage: true },
+        about:  { title: 'About this experience', text: `This <a href="https://immersiveweb.dev/" target="_blank" rel="noopener noreferrer">WebXR</a> experience was thought to highlight some possibilities of the Spatial-Marker component for A-Frame. This component make it simple to set up a color palette and drawing areas in any A-frame experience. <br> <br>
+        While working on this <a href="https://aframe.io/" target="_blank" rel="noopener noreferrer">A-Frame</a> component I got interested in how drawing in a 3D space was shaping deeper my comprehension and relationship with colors. Later I found about the studies of Newton and Goethe on colors and I got particularly intrigued by this diagram. I liked the idea of setting up a deeply researched scientific work on colors by Goethe to end up presenting this highly symbolic diagram, with not much explanations neither demonstration... and this is probably the fact that the poet minds often gets over the scientific mind! 
+        <br> <br>
+        By getting this diagram at the center of the room and by showing its meanings presented both in their german original and their english translations, I wished users to get a time to reflect on the possible meanings and nature of colors Goethe defined and to invite users to spend time with each of these 6 key colors.<br> 
+        <br> 
+        red = "schön" / beautiful ; orange = "edel" / noble ; yellow = "gut" / good ; green = "nützlich" / useful ; blue = "gemein" / common ; violet = "unnöthig" / unnecessary <br>
+        red-orange "Vernunft" / Reason ; yellow-green "Verstand" / Understanding ; green-blue = "Sinnlichkeit" / Sensuality ; violet-red = "Phantasie / Fantasy"`, image: 'assets/goethe-colors/info/about.jpg' },
+        goethe: {
+          title: 'Johann Wolfgang von Goethe (1749-1832)',
+          text: `Writer, poet, playwright, and scientist, Goethe appears today as one of the brightest minds of the 18th and 19th centuries. <br> <br>
+          A name that echoes in Germany with a deep resonance as in European Literary history. Goethe is the "father" romantic hero Werther, a young man exalted by nature, antic poetry and love. <br> <br>
+          Goethe is also the author of play "Faust": the story of a man making a deal with the devil to reach a deeper and richer sense of life no humans ever reached. "Faust" opens deep reflections on the meaning of life and the research of an absolute. This is likely this absolute and his passion for paintings that would lead Goethe to study colors and to write his "Color Theory". Hundreds of pages of scientific exploration on the nature of colors, pigments, lights and their possible meanings... <br><br>
+          The text is available in Public Domain
+          <a href="https://www.gutenberg.org/cache/epub/50572/pg50572.txt" target="_blank" rel="noopener noreferrer">here</a>
+          by the
+          <a href="https://www.gutenberg.org/" target="_blank" rel="noopener noreferrer">Gutenberg Project</a>.`,
+          image: 'assets/goethe-colors/info/goethe.jpg'
+        },
+        liszt:  { title: 'Franz Liszt', text: `One of the most acclaimed pianists of his time. The name of Franz Liszt evokes a virtuoso who reached an "absolute" as a composer and a performer. Franz Liszt played all over Europe, being acclaimed in every city. The German writer Heinrich Heine would write about "Lisztomania".<br> <br>
+        This piece, "Berceuse in D-Flat Major" was first composed in 1854 and reworked to this final version in 1862. It sounds like a stream of visions and melodies made of silence and high notes, low and fast rhythm. It invites us to let our minds flow in different movements. <br> <br>
+        I hope it will accompany you well in exploring the possible meanings of colors. <br>
+        <br>
+        This piece from Liszt was made using a CC0 Piano by <a href="https://versilian-studios.com/vcsl-keys/" target="_blank" rel="noopener noreferrer">Versilian Studios</a>, and the music is free to use under the CC0 Licence.<br>
+        <br>
+        -> It is an amazing piece of music and I invite you to look through the different versions by great performers you will find on music platforms.`, image: 'assets/goethe-colors/info/liszt.jpg' },
+        marker: { title: 'Spatial-Marker', text: `The Spatial-Marker was created as an easy to set up drawing tool for <a href="https://aframe.io/" target="_blank" rel="noopener noreferrer">A-Frame</a> experiences.<br>
+        <br>
+        By setting one or multiple drawing areas and 24 hex color values, <a href="https://aframe.io/" target="_blank" rel="noopener noreferrer">A-Frame</a> creators can fastly and easily allow drawing in 3D in their WebXR experiences. This component comes with its own movement controls for VR, using the thumbsticks to move, the trigger to draw and the grip to swap hands.<br>
+       <br>  The component is published <a href="https://github.com/rpetitjean/spatial-marker" target="_blank" rel="noopener noreferrer">here</a> under MIT License and you are free to use it. 
+        <br> Also you can find further examples of what you can make with it <a href="https://rpetitjean.github.io/spatial-marker/" target="_blank" rel="noopener noreferrer">here</a>.`, image: 'assets/goethe-colors/info/spatial-marker.jpg' },
+        free:   { title: 'MIT + CC0', text: `<a href="https://github.com/rpetitjean/spatial-marker" target="_blank" rel="noopener noreferrer">The Spatial-Marker component</a> code is published under MIT License and you are free to use it and for it. <br>
+        <br>All assets here have been created by me, <a href="https://www.remipetitjean.com/" target="_blank" rel="noopener noreferrer">Rémi Petitjean</a>, or published under the Public Domain and are 100% free to use and re-use without credit mandatory. I release all the 3D assets and texture under CC0. <br>
+        The music from Liszt was created using a CC0 Piano by <a href="<a href="https://versilian-studios.com/vcsl-keys/" target="_blank" rel="noopener noreferrer">Versilian Studios</a>, and the music is free to use under the CC0 Licence.  `, image: 'assets/goethe-colors/info/license.jpg' }
+      },
+      menuButtons: {
+        vr: 'Watch Preview Video',
+        goethe: 'Johann Wolfgang von Goethe',
+        liszt: 'Franz Liszt',
+        marker: 'Spatial-Marker for A-Frame',
+        free: 'MIT + CC0'
+      }
+    },
+
+    fr: {
+      infoBtn: 'Info',
+      toggleLabel: 'FR / EN',
+      menuTitleHTML: `
+        Cette expérience
+        <a href="https://immersiveweb.dev/" target="_blank" rel="noopener noreferrer">WebXR</a>
+        a été créée avec
+        <a href="https://aframe.io/" target="_blank" rel="noopener noreferrer">A-Frame</a>
+        pour montrer ce qu’on peut faire avec le composant
+        <a href="https://github.com/rpetitjean/spatial-marker" target="_blank" rel="noopener noreferrer">Spatial-Marker</a>,
+        et pour ouvrir des pistes de réflexion de Goethe sur les couleurs, avec la musique de Franz Liszt.
+      `,
+      back: '←',
+      pages: {
+        vr:     { title: 'Vidéo', text: `Ajoute ici tes liens vers des vidéos VR.`, hideImage: true },
+        about: { title: 'Quelques informations', text: `Cette expérience de <a href="https://immersiveweb.dev/" target="_blank" rel="noopener noreferrer">WebXR</a> a été créée afin d'explorer quelques possibilités offertes par le <a href="https://github.com/rpetitjean/spatial-marker" target="_blank" rel="noopener noreferrer">Spatial-Marker</a>, component pour le framework <a href="https://aframe.io/" target="_blank" rel="noopener noreferrer">A-Frame</a>. Ce component a pour but de proposer une solution simple pour dessiner en 3D via un projet créé avec A-Frame. <br>
+        <br> En travaillant à la publication de ce component, j'ai réalisé que l'action de dessiner en 3D et en réalité virtuelle m'ouvrait à une appréhension plus profonde des couleurs. J'ai ensuite découvert les recherches de Newton et puis de Goethe sur les couleurs et j'ai trouvé ce diagramme intriguant, issu de la "Théorie des couleurs" de Goethe. Ce qui est particulièrement frappant c'est la distance qu'a ce diagramme avec toutes les observations scientifiques émises par Goethe sur les couleurs. Ce diagramme est symbolique, non scientifique, il ne repose sur rien d'autre que l'intuition et il est là au milieu de cette pièce pour ouvrir cette question: quelle est la signification des couleurs? <br>
+        <br> rouge = "schön" / "beautiful ; orange = "edel" / noble ; jaune = "gut" / good ; vert = "nützlich" / useful ; bleu = "gemein" / common ; violet = "unnöthig" / unnecessary <br>
+        rouge-orange "Vernunft" / Reason ; jaune-vert "Verstand" / Understanding ; vert-bleu = "Sinnlichkeit" / Sensuality ; violet-rouge = "Phantasie / Fantasy`, image: 'assets/goethe-colors/info/about.jpg' },
+        goethe: { title: 'Goethe', text: `Poète, auteur de théâtre et scientifique, Goethe sonne aujourd'hui comme le nom d'un des plus brillants esprits de son temps.<br>
+<br> Un nom qui résonne en Allemagne comme dans toute l'histoire littéraire européenne. Goethe est le créateur du héros romantique Werther, un jeune exalté par la nature, par la poésie antique et par un amour (impossible).
+<br> Goethe est aussi l'auteur de "Faust" : une pièce qui nous montre un homme qui a fait un pacte avec le diable en échange de la connaissance de la plus grande richesse et profondeur de la vie, telle qu'aucun.e humain.e ne l'a ressentie. "Faust" ouvre des réflexions profondes sur le sens de la vie et la recherche d'un "absolu". C'est peut-être cet "absolu" et sa passion pour la peinture qui l'amèneront à vouloir comprendre les couleurs et à réaliser sa vaste "Théorie des couleurs". Plusieurs centaines de pages d'exploration scientifique, sur la nature des couleurs, sur les pigments, sur la lumière ainsi que la potentielle signification des couleurs... <br> <br> 
+Le texte est disponible dans le domaine public
+<a href="https://www.gutenberg.org/cache/epub/50572/pg50572.txt" target="_blank" rel="noopener noreferrer">ici</a>
+par le
+<a href="https://www.gutenberg.org/" target="_blank" rel="noopener noreferrer">Projet Gutenberg</a>.`, image: 'assets/goethe-colors/info/goethe.jpg' },
+        liszt:  { title: 'Franz Liszt', text: `L'un des pianistes les plus acclamés de son temps.<br>
+<br>
+Le nom de Franz Liszt évoque un virtuose qui a atteint la perfection, à la fois comme interprète et comme compositeur. Franz Liszt a joué à travers l'Europe entière, triomphant dans chaque ville. L'écrivain allemand Heinrich Heine a qualifié l'effet de Liszt sur la scène musicale de « Lisztomania ».
+<br><br>
+Ce morceau, « Berceuse en ré bémol majeur », fut d'abord composé en 1854, puis retravaillé dans une version finale en 1862. Il résonne comme un flot de visions et de mélodies faites de silences et de notes hautes, basses et rapides. Il nous invite à laisser notre esprit flotter à travers différents mouvements.
+<br><br>
+J'espère qu'il vous accompagnera comme il se doit dans l'exploration des possibles significations des couleurs.
+<br><br>
+Ce morceau de Liszt a été réalisé en utilisant une bibliothèque de piano en CC0 par <a href="https://versilian-studios.com/vcsl-keys/" target="_blank" rel="noopener noreferrer">Versilian Studios</a>, et la musique est libre d'utilisation sous licence CC0.
+<br><br>
+→ C'est un morceau de musique très riche et étonnant, et je vous invite à découvrir les différentes versions interprétées par une multitude d'artistes, disponibles sur les plateformes de musique.
+         `, image: 'assets/goethe-colors/info/liszt.jpg' },
+        marker: { title: 'Spatial-Marker', text: `Le <a href="https://github.com/rpetitjean/spatial-marker" target="_blank" rel="noopener noreferrer">Spatial-Marker</a> component a été créé comme une solution simple pour dessiner en 3D via un projet créé avec <a href="https://aframe.io/" target="_blank" rel="noopener noreferrer">A-Frame</a>.<br><br>
+En définissant une ou plusieurs drawing areas ainsi que 24 valeurs de couleurs hex, les créateurs qui utilisent <a href="https://aframe.io/" target="_blank" rel="noopener noreferrer">A-Frame</a> peuvent rapidement et simplement permettre de dessiner en 3D à l’intérieur de l’espace 3D de leurs expériences <a href="https://immersiveweb.dev/" target="_blank" rel="noopener noreferrer">WebXR</a>.
+Ce component est développé avec son propre modèle de locomotion, qui utilise le joystick pour le movement, le trigger pour dessiner et le grip pour le changement de main.
+
+<br><br>
+Le component est publié ici sous la licence MIT et est de fait libre d’utilisation.
+<br>
+Vous pourrez aussi trouver davantage d’exemples de l’usage de ce component sur cette page.
+       `, image: 'assets/goethe-colors/info/spatial-marker.jpg' },
+        free:   { title: 'MIT + CC0', text: `Le code du 
+<a href="https://github.com/rpetitjean/spatial-marker" target="_blank" rel="noopener noreferrer">
+Spatial-Marker component
+</a>
+est publié sous licence MIT et vous êtes libre de l’utiliser et de le modifier.
+<br><br>
+
+Tous les assets présentés ici ont été créés par moi, <a href="https://www.remipetitjean.com/" target="_blank" rel="noopener noreferrer">Rémi Petitjean</a>, ou sont publiés sous le Public Domain, et sont 100 % libres d’utilisation et de réutilisation, sans credit mandatory.  
+Tous les assets 3D et les textures sont publiés sous licence CC0.
+<br><br>
+
+La musique de Liszt a été créée en utilisant une CC0 Piano par 
+<a href="https://versilian-studios.com/vcsl-keys/" target="_blank" rel="noopener noreferrer">
+Versilian Studios</a>, et la musique est free to use sous licence CC0.
+
+`, image: 'assets/goethe-colors/info/license.jpg' }
+      },
+      menuButtons: {
+        vr: 'Voir la vidéo de présentation',
+      about:  'Quelques informations',
+        goethe: 'Johann Wolfgang von Goethe',
+        liszt: 'Franz Liszt',
+        marker: 'Spatial-Marker pour A-Frame',
+        free: 'MIT + CC0'
+      }
+    }
+  };
+
+  const MENU_IMAGE = 'assets/goethe-colors/Spatial-marker.gif';
+
+  /* =========================
+     3) DOM
+     ========================= */
+
+  const btn = document.createElement('button');
+  btn.className = 'intro-lang-switch';
+  btn.textContent = 'Info';
+  btn.style.left = '12px';
+  btn.style.right = 'auto';
+  btn.style.display = 'none';
+  btn.style.zIndex = '99998';
+  document.body.appendChild(btn);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'info-overlay';
+  overlay.innerHTML = `
+    <div id="info-modal" role="dialog" aria-modal="true" aria-label="Information">
+      <img id="info-gif" src="${MENU_IMAGE}" alt="Info">
+      <div id="info-content">
+        <div id="info-menu">
+          <button id="info-lang-toggle" type="button" class="info-link" style="min-height:40px;">FR / EN</button>
+          <div class="info-menu-title" id="info-menu-title"></div>
+
+          <button class="info-link" data-page="vr"></button>
+          <button class="info-link" data-page="about"></button>
+          <button class="info-link" data-page="goethe"></button>
+          <button class="info-link" data-page="liszt"></button>
+          <button class="info-link" data-page="marker"></button>
+          <button class="info-link" data-page="free"></button>
+        </div>
+
+        <div id="info-detail" style="display:none;">
+          <button id="info-back" type="button">←</button>
+          <div id="info-title"></div>
+          <div id="info-text"></div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const modal       = overlay.querySelector('#info-modal');
+  const imgEl       = overlay.querySelector('#info-gif');
+  const menu        = overlay.querySelector('#info-menu');
+  const detail      = overlay.querySelector('#info-detail');
+  const back        = overlay.querySelector('#info-back');
+  const titleEl     = overlay.querySelector('#info-title');
+  const textEl      = overlay.querySelector('#info-text');
+  const menuTitleEl = overlay.querySelector('#info-menu-title');
+  const toggleBtn   = overlay.querySelector('#info-lang-toggle');
+  const menuButtons = Array.from(menu.querySelectorAll('.info-link[data-page]'));
+
+  let enabled = false;
+  let currentPage = null; // null = menu
+  let onKeyDown = null;
+
+  /* =========================
+     4) IMAGE HANDLING
+     ========================= */
+
+  function setHeaderImage({ src, hide } = {}) {
+    if (!imgEl) return;
+    if (hide) {
+      imgEl.style.display = 'none';
+      imgEl.removeAttribute('src');
+      return;
+    }
+    imgEl.style.display = 'block';
+    if (src) imgEl.src = src;
+  }
+
+  /* =========================
+     5) RENDER
+     ========================= */
+
+  function getLangPack() {
+    return CONTENT[currentLang] || CONTENT.en;
+  }
+
+  function renderMenuTexts() {
+    const L = getLangPack();
+    btn.textContent = L.infoBtn || 'Info';
+    toggleBtn.textContent = L.toggleLabel || 'FR / EN';
+    menuTitleEl.innerHTML = L.menuTitleHTML || '';
+
+    menuButtons.forEach(b => {
+      const key = b.dataset.page;
+      b.textContent = (L.menuButtons && L.menuButtons[key]) ? L.menuButtons[key] : key;
+    });
+
+    back.textContent = L.back || '←';
+  }
+
+  function showMenu() {
+    currentPage = null;
+    menu.style.display = 'block';
+    detail.style.display = 'none';
+    setHeaderImage({ src: MENU_IMAGE, hide: false });
+    renderMenuTexts();
+  }
+
+  function showPage(key) {
+    const L = getLangPack();
+    const p = (L.pages && L.pages[key]) ? L.pages[key] : null;
+    if (!p) return;
+
+    currentPage = key;
+    titleEl.textContent = p.title || '';
+    textEl.innerHTML = p.text || '';
+    setHeaderImage({ src: p.image, hide: !!p.hideImage });
+
+    menu.style.display = 'none';
+    detail.style.display = 'block';
+  }
+
+  /* =========================
+     6) OPEN/CLOSE (✅ sync language right before opening)
+     ========================= */
+
+  function openModal() {
+    if (!enabled) return;
+
+    // ✅ bulletproof: always use same language as intro overlay (stored)
+    syncLangFromIntroStorageOrBrowser();
+
+    overlay.style.display = 'block';
+    showMenu();
+
+    onKeyDown = (e) => {
+      if (e.key === 'Escape') closeModal();
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+  }
+
+  function closeModal() {
+    overlay.style.display = 'none';
+    if (onKeyDown) {
+      document.removeEventListener('keydown', onKeyDown, true);
+      onKeyDown = null;
+    }
+  }
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openModal();
+  });
+
+  overlay.addEventListener('mousedown', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+
+  modal.addEventListener('mousedown', (e) => e.stopPropagation());
+
+  menu.addEventListener('click', (e) => {
+    const b = e.target.closest('.info-link[data-page]');
+    if (!b) return;
+    showPage(b.dataset.page);
+  });
+
+  back.addEventListener('click', showMenu);
+
+  /* =========================
+     7) TOGGLE LANGUAGE
+     ========================= */
+
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    currentLang = (currentLang === LANGS.FR) ? LANGS.EN : LANGS.FR;
+
+    // keep in sync with intro-overlay “remembered language”
+    try { localStorage.setItem(INTRO_STORAGE_KEY, currentLang); } catch (_) {}
+
+    if (overlay.style.display === 'block') {
+      if (currentPage) showPage(currentPage);
+      else showMenu();
+    } else {
+      renderMenuTexts();
+    }
+  });
+
+  /* =========================
+     8) ENABLE AFTER INTRO (use intro event + also listen to language changes)
+     ========================= */
+
+  const scene = document.querySelector('a-scene');
+  if (scene) {
+    scene.addEventListener('intro-start', (e) => {
+      enabled = true;
+      btn.style.display = 'block';
+
+      // If intro provides a lang, use it; otherwise use stored/browser
+      const introLang = String(e.detail?.lang || '').toLowerCase();
+      if (introLang) currentLang = introLang.startsWith('fr') ? LANGS.FR : LANGS.EN;
+      else syncLangFromIntroStorageOrBrowser();
+
+      renderMenuTexts();
+    }, { once: true });
+
+    // Bonus: if user switches LANG on intro overlay later (you emit this)
+    scene.addEventListener('intro-language-changed', (e) => {
+      const l = String(e.detail?.lang || '').toLowerCase();
+      if (!l) return;
+      currentLang = l.startsWith('fr') ? LANGS.FR : LANGS.EN;
+      renderMenuTexts();
+    });
+  } else {
+    window.addEventListener('DOMContentLoaded', () => {
+      const s = document.querySelector('a-scene');
+      if (!s) return;
+
+      s.addEventListener('intro-start', (e) => {
+        enabled = true;
+        btn.style.display = 'block';
+
+        const introLang = String(e.detail?.lang || '').toLowerCase();
+        if (introLang) currentLang = introLang.startsWith('fr') ? LANGS.FR : LANGS.EN;
+        else syncLangFromIntroStorageOrBrowser();
+
+        renderMenuTexts();
+      }, { once: true });
+
+      s.addEventListener('intro-language-changed', (e) => {
+        const l = String(e.detail?.lang || '').toLowerCase();
+        if (!l) return;
+        currentLang = l.startsWith('fr') ? LANGS.FR : LANGS.EN;
+        renderMenuTexts();
+      });
+    });
+  }
+
+  /* =========================
+     9) OPTIONAL: Debug (uncomment if needed)
+     ========================= */
+  // console.log('[info] navigator.language(s)=', navigator.languages, navigator.language);
+  // console.log('[info] localStorage intro-lang=', (() => { try { return localStorage.getItem(INTRO_STORAGE_KEY); } catch(e){ return 'blocked'; } })());
+})();
+</script>
+
+<img id="info-gif" src="assets/goethe-colors/info.gif" ...>
+
+<!-- JS for Music UI  -->
 <script>
 const ICON_PLAY = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M11.596 8.697 6.214 11.96A.5.5 0 0 1 5.5 11.53V4.47a.5.5 0 0 1 .714-.43l5.382 3.263a.5.5 0 0 1 0 .894z"/></svg>`;
 const ICON_PAUSE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 3.5A.5.5 0 0 1 6 4v8a.5.5 0 0 1-1 0V4a.5.5 0 0 1 .5-.5zm5 0A.5.5 0 0 1 11 4v8a.5.5 0 0 1-1 0V4a.5.5 0 0 1 .5-.5z"/></svg>`;
@@ -1387,80 +1694,65 @@ window.addEventListener('DOMContentLoaded', () => {
     background="color: #ffffff" 
     renderer="colorManagement: true; physicallyCorrectLights: true" 
     goethe-zones="rig: #rig"  
-    bgm-manager="src: assets/goethe-colors/Liszt_Liebstraum_No3_CC0.mp3;
+    bgm-manager="src: assets/goethe-colors/FranzLiszt_Berceuse_D_FlatMajor_174_ScoreToMIDI_CC0_compressed.mp3;
                volume: 0.75;
                fadeInMs: 900;
                fadeOutMs: 600;
                pauseWhenHidden: true"
     intro-overlay="
-   backgroundColor: #ffffff;
+    backgroundColor: #ffffff;
     textColor: #000000;
     fontFamily: system-ui;
     fontSize: 1.1rem;
-
     lang1Code: en;
     lang2Code: fr;
     buttonLabel1: Enter;
     buttonLabel2: Entrer;
     loadingText1: Loading assets…;
     loadingText2: Chargement des éléments…;
-
     charSpeed: 55;         
     lineGap: 300;         
     imageFadeDuration: 2000;
 
-    text1:
-a poet, scientist and philosopher came to a long work on colours, <br>
-he studied light, pigments, paintings, psychology... <br>
-<br>
-And he made his 'Color Theory', as a wide set of reflections and ideas.<br>
-There he drafted a purely 'intuitive' diagram <br> 
-<br> 
-➔ on a possible meaning of colours<br>
+    text1: a poet, scientist and philosopher came to a long work on colors,<br>
+    he studied light, pigments, paintings, psychology...<br>
+    <br>
+    And he made his 'Color Theory', as a wide set of reflections and ideas.<br>There he drafted a purely 'intuitive' diagram<br> 
+    <br> 
+    ➔ on a possible meaning of colors<br>;
 
-
-;
-text2:un poète, scientifique et philosophe a longuement réfléchi sur les couleurs, <br>
-il a étudié la lumière, les pigments, la peinture, la psychologie… <br>
-<br>
-Et il a écrit sa « Théorie des couleurs », un ensemble vaste d’idées et de réflexions. <br>
-Il y a dessiné un diagramme particulier, une intuition 
-➔ la signification possible des couleurs.<br>;
-
-  
+    text2:un poète, scientifique et philosophe a longuement réfléchi sur les couleurs, <br>
+    il a étudié la lumière, les pigments, la peinture, la psychologie… <br>
+    <br>
+    Et il a écrit sa « Théorie des couleurs », un ensemble vaste d’idées et de réflexions. <br>
+    Il y a dessiné un diagramme particulier, une intuition <br> 
+    <br> 
+    ➔ la signification possible des couleurs.<br>;
 
     lang1Code: en;
     lang2Code: fr;
     buttonLabel1: Enter;
     buttonLabel2: Entrer;
     loadingText1: Chargement des éléments…;
-    loadingText2: Loading assets…;
-  ">
+    loadingText2: Loading assets…;">
 
   <a-assets>
 
-    <img id="line" src="assets/goethe-colors/Line.png">
+  <img id="line" src="assets/goethe-colors/Line.png">
 
-   <a-asset-item id="env" src="assets/goethe-colors/env-goethe.glb"></a-asset-item>
-   <a-asset-item id="navmesh" src="assets/goethe-colors/navmesh-env.glb"></a-asset-item>
-   <a-asset-item id="table" src="assets/goethe-colors/table.glb"></a-asset-item>
-   <img id="diagram" src="assets/goethe-colors/upscale-diagram_png512.png">
-   <a-asset-item id="goethe" src="assets/goethe-colors/goethe.glb"></a-asset-item>
-   <a-asset-item id="book" src="assets/goethe-colors/Theory-Book.glb"></a-asset-item>
+    <a-asset-item id="env" src="assets/goethe-colors/env-goethe.glb"></a-asset-item>
+    <a-asset-item id="navmesh" src="assets/goethe-colors/navmesh-env.glb"></a-asset-item>
+    <a-asset-item id="table" src="assets/goethe-colors/table.glb"></a-asset-item>
+    <img id="diagram" src="assets/goethe-colors/upscale-diagram_png512.png">
+    <a-asset-item id="goethe" src="assets/goethe-colors/goethe.glb"></a-asset-item>
+    <a-asset-item id="book" src="assets/goethe-colors/Theory-Book.glb"></a-asset-item>
     
-     <a-asset-item id="navmesh-blue" src="assets/goethe-colors/navmesh-blue.glb"></a-asset-item>
-     <a-asset-item id="navmesh-green" src="assets/goethe-colors/navmesh-green.glb"></a-asset-item>
-     <a-asset-item id="navmesh-indigo" src="assets/goethe-colors/navmesh-indigo.glb"></a-asset-item>
-     <a-asset-item id="navmesh-orange" src="assets/goethe-colors/navmesh-orange.glb"></a-asset-item>
-     <a-asset-item id="navmesh-red" src="assets/goethe-colors/navmesh-red.glb"></a-asset-item>
-     <a-asset-item id="navmesh-yellow" src="assets/goethe-colors/navmesh-yellow.glb"></a-asset-item>
-
-     <a-asset-item id="interactable-blue" src="assets/goethe-colors/interactable/interactable-blue.glb"></a-asset-item>
-     <a-asset-item id="interactable-green" src="assets/goethe-colors/interactable/interactable-green.glb"></a-asset-item>
-     <a-asset-item id="interactable-indigo" src="assets/goethe-colors/interactable/interactable-indigo.glb"></a-asset-item>
-     <a-asset-item id="interactable-orange" src="assets/goethe-colors/interactable/interactable-orange.glb"></a-asset-item>
-     <a-asset-item id="interactable-red" src="assets/goethe-colors/interactable/interactable-red.glb"></a-asset-item>
-     <a-asset-item id="interactable-yellow" src="assets/goethe-colors/interactable/interactable-yellow.glb"></a-asset-item>
+    <a-asset-item id="navmesh-blue" src="assets/goethe-colors/navmesh-blue.glb"></a-asset-item>
+    <a-asset-item id="navmesh-green" src="assets/goethe-colors/navmesh-green.glb"></a-asset-item>
+    <a-asset-item id="navmesh-indigo" src="assets/goethe-colors/navmesh-indigo.glb"></a-asset-item>
+    <a-asset-item id="navmesh-orange" src="assets/goethe-colors/navmesh-orange.glb"></a-asset-item>
+    <a-asset-item id="navmesh-red" src="assets/goethe-colors/navmesh-red.glb"></a-asset-item>
+    <a-asset-item id="navmesh-yellow" src="assets/goethe-colors/navmesh-yellow.glb"></a-asset-item>
 
     <a-asset-item id="element-blue" src="assets/goethe-colors/elements/blue-element.glb"></a-asset-item>
     <a-asset-item id="element-green" src="assets/goethe-colors/elements/green-element.glb"></a-asset-item>
@@ -1484,22 +1776,19 @@ Il y a dessiné un diagramme particulier, une intuition
     <a-asset-item id="unnothig" src="assets/goethe-colors/words compressed/unnothig.glb"></a-asset-item>
     <a-asset-item id="vernunft" src="assets/goethe-colors/words compressed/Vernunft.glb"></a-asset-item>
 
-    <audio id="bgm" src="assets/goethe-colors/Liszt_Liebstraum_No3_CC0.mp3" preload="auto" loop crossorigin="anonymous"></audio>
+    <audio id="bgm" src="assets/goethe-colors/FranzLiszt_Berceuse_D_FlatMajor_174_ScoreToMIDI_CC0_compressed.mp3" preload="auto" loop crossorigin="anonymous"></audio>
 
   </a-assets>
 
-          <!-- PC & VR Rig -->
+          <!--VR Rig -->
 <a-entity id="rig" 
 spatial-marker
-movement-controls="constrainToNavMesh: true ; speed : 0.5; controls: keyboard; enabled:true"  
 position="-0.8 0 3.6" rotation="0 -20 0"
 simple-navmesh-constraint="navmesh:.navmesh;fall:0;height:0;exclude:.navmesh-hole; "
 cursor="rayOrigin: mouse"
 raycaster="objects: .clickable">
-
-      <a-box camera="far: 700; fov: 55; near: 0.1; active: true" position="0 1.7 0" visible="false" ></a-box>
-      <a-entity id="left-hand"
-          laser-controls="hand: left"
+<a-box camera="far: 700; fov: 55; near: 0.1; active: true" position="0 1.7 0" visible="false" ></a-box>
+<a-entity id="left-hand" laser-controls="hand: left"
           hand-laser="texture: #line;
                       colorIdle: #0b0b0b;
                       colorHover: #ff7a18;
@@ -1507,11 +1796,9 @@ raycaster="objects: .clickable">
                       opacity: 0.55;
                       emissive: 1.2;
                       length: 6;
-                      radius: 0.008;">
-</a-entity>
+                      radius: 0.008;"></a-entity>
 
-<a-entity id="right-hand"
-          laser-controls="hand: right"
+<a-entity id="right-hand" laser-controls="hand: right"
           hand-laser="texture: #line;
                       colorIdle: #0b0b0b;
                       colorHover: #ff7a18;
@@ -1519,21 +1806,18 @@ raycaster="objects: .clickable">
                       opacity: 0.55;
                       emissive: 1.2;
                       length: 6;
-                      radius: 0.008;">
-</a-entity>
-
+                      radius: 0.008;"></a-entity>
 </a-entity>
 
  <!-- Sky -->
 <a-sky radius="200" theta-length="110" class="environment" material="shader: skyshader; blending: none; anisotropy: 1.04; turbidity: 20; mieCoefficient: 0.1; mieDirectionalG: 0.72; sunPosition: -0.10389385923870163 0.9444896294427422 0.31168157771610494"></a-sky>
   
 <!-- Lights -->
-
 <a-entity light="intensity: 1; type: ambient"></a-entity>
 <a-entity light="intensity: 1.884; castShadow: true; shadowBias: -0.0002; shadowCameraFov: 0; shadowCameraNear: -2.47; shadowCameraTop: 8.11; shadowCameraRight: 7.68; shadowCameraBottom: -12.3; shadowCameraLeft: -11.9" position="-0.49743 2.96771 1.19041" data-aframe-default-light="" aframe-injected=""></a-entity>
 <a-entity light="intensity: 1.5; type: point" position="0 1.88667 0"></a-entity>
 
-<!-- Scene Environement -->
+<!-- Scene Environement + nevmesh + shadow hider -->
 <a-entity gltf-model="#env" rotation="0 -90 0" position="0 0 0" shadow=""></a-entity>
 <a-entity gltf-model="#navmesh" rotation="0 -90 0" position="0 0 0" visible="false" class="navmesh"></a-entity>
 <a-entity geometry="primitive: ring; radiusInner: 0.6" rotation="90 -9.55 0" position="0 3.5593 0" scale="6.1595 6.1595 6.1595" shadow="" id="extra-light-hidder"></a-entity>
@@ -1581,9 +1865,7 @@ raycaster="objects: .clickable">
 <a-entity gltf-model="#table" rotation="0 -90 0" position="0 0 0" visible="true"></a-entity>
 
 
-
-     <!-- navmeshs -->
-
+<!-- navmeshs x6 -->
 <!-- ORANGE -->
 <a-entity id="navmesh-orange"
           gltf-model="#navmesh-orange"
@@ -1645,15 +1927,6 @@ raycaster="objects: .clickable">
 </a-entity>
 
 
-  <!-- interactable -->
-<a-entity id="btn-blue" gltf-model="#interactable-blue" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
-<a-entity id="btn-green" gltf-model="#interactable-green" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
-<a-entity id="btn-indigo" gltf-model="#interactable-indigo" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
-<a-entity id="btn-orange" gltf-model="#interactable-orange" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
-<a-entity id="btn-red" gltf-model="#interactable-red" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
-<a-entity id="btn-yellow" gltf-model="#interactable-yellow" rotation="0 -90 0" position="0 0 0" shadow="" class="clickable" visible="false"></a-entity>
-
-
 <!-- drawing space elements -->
 <!-- Orange Area -->
 <a-entity id="element-orange-area"
@@ -1699,12 +1972,10 @@ raycaster="objects: .clickable">
           gradient-color="color1: #ffffff; color2: #8b8494; roughness: 0; marbleMix: 0.1; opacity: 0">
 </a-entity>
 
-
 <!-- Marker-Texts -->
 <a-entity id="goethe-text" gltf-model="#text1" position="0.02691 1.816 -1.09926" scale="1.5 1.5 1.5" opacity="0" flat-override="color: #000000"></a-entity>
 <a-entity id="diagram-text" gltf-model="#text2" position="0.02691 1.816 -1.09926" scale="1.5 1.5 1.5" opacity="0" flat-override="color: #000000"></a-entity>
 <a-entity id="theory-text" gltf-model="#text3" position="0.02691 1.816 -1.09926" scale="1.5 1.5 1.5" opacity="0" flat-override="color: #000000"></a-entity>
-
 <a-entity id="edel" gltf-model="#edel" position="-0.37194 2.28755 -6.13326" flat-override="opacity: 0.52" scale="0.75 0.75 0.75"></a-entity>
 <a-entity id="gut" gltf-model="#gut" position="5.49982 2.42192 -3.10054" flat-override="opacity: 0.52" scale="0.75 0.75 0.75" rotation="0 -71.5990979107282 0"></a-entity>
 <a-entity id="nuztlich" gltf-model="#nuztlich" position="4.97181 2.28755 2.96997" flat-override="opacity: 0.52" scale="0.75 0.75 0.75" rotation="0 -126.8201972476418 0"></a-entity>
@@ -1717,8 +1988,6 @@ raycaster="objects: .clickable">
 <a-entity id="vernunft" gltf-model="#vernunft" position="-1.32109 0.22329 -2.73259" flat-override="opacity: 0.2" rotation="-65.7698253030672 21.4790418238643 8.341692539309655"></a-entity>
 
 </a-scene>
-
-
 
   </body>
 </html>

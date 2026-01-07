@@ -5,13 +5,59 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>A-Frame Spatial-Marker</title>
   <style>
-    :root {
-      --fg:#111; --muted:#555; --link:#0a66ff; --border:#e5e7eb;
-      --red:#E94462; --blue:#80A8FF; --yellow:#ffff00;
-    }
+:root{
+  --bg:#fff;
+  --fg:#111;
+  --muted:#555;
+  --link:#0a66ff;
+  --border:#e5e7eb;
+
+  --red:#E94462;
+  --blue:#80A8FF;
+  --yellow:#ffff00;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:#0e0e11;
+    --fg:#eaeaea;
+    --muted:#a1a1aa;
+    --link:#80a8ff;
+    --border:#2a2a2a;
+  }
+
+  pre { background:#141418; }
+}
+
+html[data-theme="dark"]{
+  --bg:#0e0e11;
+  --fg:#eaeaea;
+  --muted:#a1a1aa;
+  --link:#80a8ff;
+  --border:#2a2a2a;
+}
+html[data-theme="dark"] pre{background:#141418}
+
+html[data-theme="light"]{
+  --bg:#fff;
+  --fg:#111;
+  --muted:#555;
+  --link:#0a66ff;
+  --border:#e5e7eb;
+}
+html[data-theme="light"] pre{background:#fafafa}
+
+
     *{box-sizing:border-box}
     html,body{height:100%}
-    body{margin:0; font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji","Segoe UI Emoji"; color:var(--fg); background:#fff}
+    html { background: var(--bg); }
+   body{
+  margin:0;
+  font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji","Segoe UI Emoji";
+  color:var(--fg);
+  background:var(--bg);
+}
+
     main{max-width:980px; margin:0 auto; padding:32px 20px 64px}
     h1{font-size:clamp(28px,4vw,42px); line-height:1.15; margin:0 0 12px}
     p{margin:10px 0}
@@ -58,20 +104,66 @@
 
     /* Footer */
     footer{margin-top:40px; padding-top:16px; border-top:1px solid var(--border)}
+
+    header{position:relative}
+.theme-toggle{
+  position:absolute;
+  top:0;
+  right:0;
+  border:1px solid var(--border);
+  background:transparent;
+  color:var(--fg);
+  border-radius:10px;
+  padding:6px 10px;
+  cursor:pointer;
+  line-height:1;
+}
+.theme-toggle:hover{opacity:.85}
+
+@media (max-width: 640px){
+  header{position:static;}
+
+  .theme-toggle{
+    position:fixed;
+    right:14px;
+    bottom:14px;
+    top:auto;
+    z-index:9999;
+
+    padding:10px 12px;
+    border-radius:999px;
+
+    /* simple fallback background */
+    background: rgba(0,0,0,0.08);
+  }
+
+  html[data-theme="dark"] .theme-toggle{
+    background: rgba(255,255,255,0.08);
+  }
+}
+
+/* show one icon depending on theme */
+html[data-theme="light"] .theme-toggle .moon{display:none}
+html[data-theme="dark"]  .theme-toggle .sun{display:none}
+
   </style>
 </head>
 <body>
   <main>
     <header>
       <h1>A-Frame Spatial-Marker</h1>
+
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark mode">
+      <span class="sun">☀️</span><span class="moon">🌙</span>
+      </button>
+
       <div class="gif-row">
-        <!-- Replace these GIF sources with your own -->
         <img src="assets/gifs/hello-gif.gif" alt="Spatial-Marker demo 1 (placeholder)">
         <img src="assets/gifs/Spatial-marker.gif" alt="Spatial-Marker demo 2 (placeholder)">
         <img src="assets/gifs/for-aframe.gif" alt="Spatial-Marker demo 3 (placeholder)">
-
       </div>
-        <small>draw in 3D with A-Frame // 24 colors & 4 marker sizes</small>
+
+      <small>draw in 3D with A-Frame // 24 colors & 4 marker sizes</small>
     </header>
 
     <section>
@@ -82,9 +174,7 @@
         inputs. It allows users to draw in 3D space on defined drawing areas using one of their VR controllers.
       </p>
 
-            <p>
-   This Spatial-Marker component embeds its own movement logic using the thumbsticks, so it can be used in any A-Frame scene without any other locomotion system but the use of teleport-controls isn't recommended due to the use of the color palette.
-      </p>
+      <p>This Spatial-Marker component embeds its own movement logic using the thumbsticks, so it can be used in any A-Frame scene without any other locomotion system but the use of teleport-controls isn't recommended due to the use of the color palette.</p>
     </section>
 
     <hr>
@@ -179,5 +269,45 @@
       created by <a href="https://remipetitjean.com/" target="_blank" rel="noopener">remi petitjean</a>
     </footer>
   </main>
+
+<script>
+  const btn = document.getElementById('theme-toggle');
+  const root = document.documentElement;
+
+  const saved = localStorage.getItem('theme');
+  if (saved) root.dataset.theme = saved;
+
+  btn.addEventListener('click', () => {
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    localStorage.setItem('theme', next);
+  });
+</script>
+
+<script>
+(() => {
+  const root = document.documentElement;
+  const btn = document.getElementById('themeToggle');
+
+  // 1) Apply saved theme if any
+  const saved = localStorage.getItem('theme'); // "light" | "dark" | null
+  if (saved === 'light' || saved === 'dark') {
+    root.setAttribute('data-theme', saved);
+  } else {
+    // 2) Otherwise follow system preference
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+  }
+
+  // 3) Toggle + persist
+  btn.addEventListener('click', () => {
+    const current = root.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+  });
+})();
+</script>
+
 </body>
 </html>

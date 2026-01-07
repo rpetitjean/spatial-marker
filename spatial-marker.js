@@ -1,11 +1,10 @@
 /**
  
-Spatial Marker is calling to 8 different A-Frame components develloped in this script and is the one to use the a-scene.
+Spatial Marker is calling to 7 different A-Frame components develloped in this script and is the one to use the a-scene.
 
-The 8 components are:
+The 7 components are:
 - painting-area-controller: manages the draxing area and enables/disables drawing and locomotion according to the position of the rig
 - paint-tool-reset: manages the assignment of the painting hand and the palette hand
-- hand-swapper: allows swapping the painting hand and palette hand
 - draw-line: allows drawing lines in 3D space
 - size-picker: allows selecting marker sizes (4 sizes)
 - color-picker: allows selecting marker colors (24 colors)
@@ -23,7 +22,7 @@ AFRAME.registerComponent('spatial-marker', {
     areaSize:        { default: '4 4' },           // "width height"
     areaPosition:    { default: '0 0 -4' },        // "x y z"
     areaRotation:    { default: '-90 0 0' },       // "x y z"
-    areaColor:       { default: '#57ff94'},
+    areaColor:       { default: '#ffffffff'},
     areaOpacity:     { default: 0.1 },
     areaTransparent: { default: true },
 
@@ -35,7 +34,7 @@ AFRAME.registerComponent('spatial-marker', {
 
     // --- Color-picker passthrough (applied whenever color-picker appears) ---
     colors:          { default: [
-,
+
   '#f2f23a','#d8d835',  
   '#f4bd36','#d29930','#f58436','#d06430',   
   '#f45336','#d13230','#f33a3a','#d13636','#f3398c','#d13470',   
@@ -100,7 +99,8 @@ _applySizePickerOptions(handEl){
   if (!handEl.hasAttribute('active-brush')) return;
   handEl.setAttribute('size-picker', {
     sizes: this.data.markerSize,   // <-- was this.data.sizes
-    hintSize: this.data.markerSizeHint || this.data.hintSize || 0.1, // optional; keep your old hint if used
+    hintSize: this.data.hintSize || 0.1,
+
     imgHint: this.data.imgHint,
     billboardHints: this.data.billboardHints
   });
@@ -437,73 +437,7 @@ AFRAME.registerComponent('paint-tool-reset', {
   }
 });
 
-// 3) HAND-SWAPPER
-// allows swapping the painting hand and palette hand
-AFRAME.registerComponent('hand-swapper', {
-  init() {
-    this.leftHand  = document.getElementById('left-hand');
-    this.rightHand = document.getElementById('right-hand');
-
-    this.onGrip = this.onGrip.bind(this);
-    this.leftHand .addEventListener('gripdown', this.onGrip);
-    this.rightHand.addEventListener('gripdown', this.onGrip);
-
-    this.activate('right');
-  },
-
-  onGrip(evt) {
-    const pac = this.el.components['painting-area-controller'];
-    if (!pac || !pac.inside) return;   // swap only inside the area
-
-    const side = evt.currentTarget.id === 'left-hand' ? 'left' : 'right';
-    this.activate(side);
-  },
-
-  activate(side) {
-    const painter = side === 'left' ? this.leftHand : this.rightHand;
-    const palette = side === 'left' ? this.rightHand : this.leftHand;
-
-    // Clean paint UI; keep locomotion
-    [this.leftHand, this.rightHand].forEach(h => {
-      const dl = h.components['draw-line'];
-      if (dl) {
-        dl.disableInput?.();
-        if (dl.indicator) {
-          h.object3D.remove(dl.indicator);
-          dl.indicator.geometry?.dispose?.();
-          dl.indicator.material?.dispose?.();
-        }
-      }
-      h.removeAttribute('draw-line');
-      h.removeAttribute('size-picker');
-      h.removeAttribute('color-picker'); // <- no palette on awake
-      h.removeAttribute('active-brush');
-
-      if (!h.components['thumbstick-controls']) {
-        h.setAttribute('thumbstick-controls', 'rigSelector', '#rig');
-      }
-    });
-
-    // Painter setup
-    painter.setAttribute('draw-line', 'color:#ffffff; thickness:0.02; minDist:0.005');
-    painter.setAttribute('size-picker','');
-    painter.setAttribute('active-brush','');
-
-    const dl = painter.components['draw-line'];
-    if (dl) dl.disableInput?.();
-
-    // If inside, controller will show palette & gate locomotion to this hand
-    const pac = this.el.components['painting-area-controller'];
-    if (pac && pac.inside) pac.enablePainting();
-  },
-
-  remove() {
-    this.leftHand .removeEventListener('gripdown', this.onGrip);
-    this.rightHand.removeEventListener('gripdown', this.onGrip);
-  }
-});
-
-// 4) DRAW-LINE
+// 3) DRAW-LINE
 // allows drawing lines
 AFRAME.registerComponent('draw-line', {
   schema: {
@@ -627,7 +561,7 @@ AFRAME.registerComponent('draw-line', {
   }
 });
 
-// 5) SIZE-PICKER
+// 4) SIZE-PICKER
 // allows selecting marker sizes (4 sizes)
 AFRAME.registerComponent('size-picker',{
   schema:{
@@ -702,7 +636,7 @@ AFRAME.registerComponent('size-picker',{
     if (!this.data.billboardHints || !this._hint) return;
     const cam = this.el.sceneEl?.camera?.el;
     if (!cam?.object3D) return;
-    const camPos = new THREE.Vector3();
+    const camPos = new AFRAME.THREE.Vector3();
     cam.object3D.getWorldPosition(camPos);
     this._hint.object3D?.lookAt(camPos);
   },
@@ -790,19 +724,24 @@ AFRAME.registerComponent('size-picker',{
   },
 
   // ---------- hint ----------
-  _ensureSideHint(){
-    if (this._hint && this._hint.isConnected) return this._hint;
-    const p = document.createElement('a-plane');
-    p.setAttribute('width',  this.data.hintSize);
-    p.setAttribute('height', this.data.hintSize);
-    const mat = this.data.imgHint
-      ? `src:${this.data.imgHint}; side:double; transparent:true`
-      : `color:${this.data.hintTint}; opacity:${this.data.hintOpacity}; transparent:true; side:double`;
-    p.setAttribute('material', mat);
-    this.el.appendChild(p);
-    this._hint = p;
-    return p;
-  },
+ _ensureSideHint(){
+  if (this._hint && this._hint.isConnected) return this._hint;
+
+  const p = document.createElement('a-plane');
+
+  p.setAttribute('width',  this.data.hintSize);
+  p.setAttribute('height', this.data.hintSize);
+
+  p.setAttribute('material', `
+    src:${this.data.imgHint};
+    transparent:true;
+    side:double
+  `);
+
+  this.el.appendChild(p);
+  this._hint = p;
+  return p;
+},
 
   _refreshSideHint(){
     const p = this._ensureSideHint();
@@ -836,12 +775,12 @@ AFRAME.registerComponent('size-picker',{
   }
 });
 
-// 6) COLOR-PICKER
+// 5) COLOR-PICKER
 // allows selecting marker colors (up to 24 colors in a palette)
 AFRAME.registerComponent('color-picker',{
   schema:{
     colors:{ default:[
-   '#f2f23a','#d8d835',  
+  '#f2f23a','#d8d835',  
   '#f4bd36','#d29930','#f58436','#d06430',   
   '#f45336','#d13230','#f33a3a','#d13636','#f3398c','#d13470',   
   '#f339f3','#d134d8','#9933f3','#7300d8','#3333f3','#0000d8',   
@@ -1064,7 +1003,7 @@ AFRAME.registerComponent('color-picker',{
   }
 });
 
-// 7) THUMBSTICK-CONTROLS
+// 6) THUMBSTICK-CONTROLS
 // basic VRlocomotion using meta-touch-controls thumbstick
 AFRAME.registerComponent('thumbstick-controls', {
     schema: {
@@ -1184,16 +1123,14 @@ AFRAME.registerComponent('thumbstick-controls', {
     }
 });
 
-// 8) BUTTON-COLORIZER
+// 7) BUTTON-COLORIZER
 // tints controller buttons based on the UI
 AFRAME.registerComponent('button-colorizer', {
   schema: {
     enabled:           { default: true },  // <- NEW: opt-in tinting
-
     useEmissive:       { default: true },
     overrideBaseColor: { default: true },
     debug:             { default: false },
-
     emissiveFace:      { default: 0.30 },
     emissiveGrip:      { default: 0.00 }
   },
@@ -1370,15 +1307,21 @@ AFRAME.registerComponent('button-colorizer', {
   },
 
   _restoreTintedOnly() {
-    if (!this._original.size) return;
-    for (const [uuid, mats] of this._original.entries()) {
-      const node = this._findNodeByUUID(uuid);
-      if (!node) continue;
-      node.material = Array.isArray(node.material) ? mats : mats[0];
-      node.material.needsUpdate = true;
-    }
-    this._original.clear();
-  },
+  if (!this._original.size) return;
+  for (const [uuid, mats] of this._original.entries()) {
+    const node = this._findNodeByUUID(uuid);
+    if (!node) continue;
+
+    // dispose current (tinted) materials
+    const cur = Array.isArray(node.material) ? node.material : [node.material];
+    cur.forEach(m => m?.dispose?.());
+
+    // restore originals
+    node.material = Array.isArray(node.material) ? mats : mats[0];
+    node.material.needsUpdate = true;
+  }
+  this._original.clear();
+},
 
   _findNodeByUUID(uuid) {
     const mesh = this.el.getObject3D('mesh');
@@ -1476,267 +1419,5 @@ AFRAME.registerComponent('button-colorizer', {
       }
       m.needsUpdate = true;
     });
-  }
-});
-
-// 9) DUAL-GRIP-EXPORTER
-// 9) DUAL-GRIP-EXPORTER (robust autoload fix: temporarily map window.THREE -> AFRAME.THREE)
-AFRAME.registerComponent('dual-grip-exporter', {
-  schema: {
-    holdMs:           { default: 600 },     // hold both grips this long
-    binary:           { default: true },    // GLB (true) or glTF JSON (false)
-    rootSelector:     { default: 'scene' }, // 'scene' or CSS selector (e.g., '#rig')
-    autoloadExporter: { default: true },    // auto-load GLTFExporter if missing
-    exclude:          { default: '' },      // comma-separated selectors to hide during export
-    showToast:        { default: true },    // on-screen text feedback
-    desktopKey:       { default: 'e' }      // optional desktop shortcut key (press to export)
-  },
-
-  init() {
-    this.left  = document.getElementById('left-hand');
-    this.right = document.getElementById('right-hand');
-
-    this._down = { left:false, right:false };
-    this._timer = null;
-    this._cooldown = false;
-
-    this._onPress    = this._onPress.bind(this);
-    this._onRelease  = this._onRelease.bind(this);
-    this._onKey      = this._onKey.bind(this);
-
-    const pressEvts   = ['gripdown','squeezestart'];
-    const releaseEvts = ['gripup','squeezeend'];
-    [this.left, this.right].forEach(h => {
-      if (!h) return;
-      pressEvts.forEach(e => h.addEventListener(e, this._onPress));
-      releaseEvts.forEach(e => h.addEventListener(e, this._onRelease));
-    });
-
-    if (this.data.desktopKey) window.addEventListener('keydown', this._onKey);
-
-    if (this.data.showToast) this._ensureToast();
-
-    this._exporterReady = this._ensureExporter();
-  },
-
-  remove() {
-    const pressEvts   = ['gripdown','squeezestart'];
-    const releaseEvts = ['gripup','squeezeend'];
-    [this.left, this.right].forEach(h => {
-      if (!h) return;
-      pressEvts.forEach(e => h.removeEventListener(e, this._onPress));
-      releaseEvts.forEach(e => h.removeEventListener(e, this._onRelease));
-    });
-    window.removeEventListener('keydown', this._onKey);
-    clearTimeout(this._timer);
-    this._toast && this._toast.remove();
-  },
-
-  // ---------- input handlers ----------
-  _onPress(evt){
-    const side = (evt.currentTarget === this.left) ? 'left' : 'right';
-    this._down[side] = true;
-    if (this._down.left && this._down.right) {
-      this._hapticBoth(0.5, 20);
-      this._showToast('Hold both grips…');
-      this._startTimer();
-    }
-  },
-
-  _onRelease(evt){
-    const side = (evt.currentTarget === this.left) ? 'left' : 'right';
-    this._down[side] = false;
-    clearTimeout(this._timer); this._timer = null;
-    this._showToast('');
-  },
-
-  _onKey(e){
-    if (!this.data.desktopKey) return;
-    if (e.key && e.key.toLowerCase() === this.data.desktopKey.toLowerCase()) this._export();
-  },
-
-  _startTimer(){
-    if (this._timer || this._cooldown) return;
-    this._timer = setTimeout(() => {
-      this._timer = null;
-      if (this._down.left && this._down.right) this._export();
-    }, this.data.holdMs);
-  },
-
-  // ---------- exporter prep (autoload + alias to AFRAME.THREE) ----------
-  async _ensureExporter(){
-    if (AFRAME?.THREE?.GLTFExporter) return true;
-
-    const aliasIfPresent = () => {
-      if (window.THREE?.GLTFExporter && !AFRAME.THREE.GLTFExporter) {
-        AFRAME.THREE.GLTFExporter = window.THREE.GLTFExporter;
-      }
-      return !!AFRAME.THREE.GLTFExporter;
-    };
-    if (aliasIfPresent()) return true;
-
-    if (!this.data.autoloadExporter) {
-      console.warn('[dual-grip-exporter] THREE.GLTFExporter missing. Include it via <script>.');
-      return false;
-    }
-
-    // Some browsers/CDNs load the non-module exporter expecting a global window.THREE.
-    // Ensure it points to AFRAME.THREE while loading, then restore.
-    const withGlobalTHREE = async (loader) => {
-      const prev = window.THREE;
-      try {
-        window.THREE = AFRAME.THREE;
-        await loader();
-      } finally {
-        // Keep GLTFExporter aliased onto AFRAME.THREE
-        if (window.THREE?.GLTFExporter && !AFRAME.THREE.GLTFExporter) {
-          AFRAME.THREE.GLTFExporter = window.THREE.GLTFExporter;
-        }
-        // Restore previous window.THREE (if any)
-        if (prev) window.THREE = prev; else delete window.THREE;
-      }
-    };
-
-    const rev = (AFRAME.THREE && AFRAME.THREE.REVISION) ? AFRAME.THREE.REVISION : 152;
-    const candidates = [
-      `https://cdn.jsdelivr.net/npm/three@0.${rev}.0/examples/js/exporters/GLTFExporter.js`,
-      'https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/exporters/GLTFExporter.js',
-      'https://unpkg.com/three@0.152.2/examples/js/exporters/GLTFExporter.js'
-    ];
-
-    const loadScript = (url) => new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = url;
-      s.async = true;
-      s.crossOrigin = 'anonymous';
-      s.referrerPolicy = 'no-referrer';
-      s.onload = res;
-      s.onerror = rej;
-      document.head.appendChild(s);
-    });
-
-    for (const url of candidates) {
-      try {
-        await withGlobalTHREE(() => loadScript(url));
-        if (AFRAME.THREE.GLTFExporter) return true;
-      } catch (_e) {
-        console.warn('[dual-grip-exporter] failed to load', url);
-      }
-    }
-
-    console.warn('[dual-grip-exporter] GLTFExporter still unavailable after attempts.');
-    return false;
-  },
-
-  // ---------- export ----------
-  _getRootObject3D(){
-    if (this.data.rootSelector === 'scene') return this.el.sceneEl.object3D;
-    const el = document.querySelector(this.data.rootSelector);
-    return (el && el.object3D) ? el.object3D : this.el.sceneEl.object3D;
-  },
-
-  _collectExclusionUUIDs(root) {
-    if (!this.data.exclude) return new Set();
-    const set = new Set();
-    this.data.exclude.split(',').map(s=>s.trim()).filter(Boolean).forEach(sel=>{
-      document.querySelectorAll(sel).forEach(el=>{
-        if (el?.object3D) set.add(el.object3D.uuid);
-      });
-    });
-    return set;
-  },
-
-  async _export(){
-    this._cooldown = true;
-    setTimeout(()=> this._cooldown = false, 1500);
-
-    const ok = await this._exporterReady;
-    if (!ok) { this._showToast('Exporter not available'); return; }
-
-    const THREE = AFRAME.THREE;
-    const exporter = new THREE.GLTFExporter();
-    const root = this._getRootObject3D();
-
-    // Hide excluded nodes during export
-    const hidden = [];
-    const exclude = this._collectExclusionUUIDs(root);
-    if (exclude.size) {
-      root.traverse(o => { if (exclude.has(o.uuid)) { hidden.push({o,v:o.visible}); o.visible = false; } });
-    }
-
-    const started = Date.now();
-    this._showToast('Exporting…');
-    this._hapticBoth(1.0, 40);
-
-    try {
-      exporter.parse(
-        root,
-        (result) => {
-          hidden.forEach(h => h.o.visible = h.v);
-
-          const t = new Date();
-          const pad = n => (n<10?'0':'')+n;
-          const name = `spatial-marker_${t.getFullYear()}${pad(t.getMonth()+1)}${pad(t.getDate())}_${pad(t.getHours())}${pad(t.getMinutes())}${pad(t.getSeconds())}`;
-
-          if (this.data.binary) {
-            const blob = new Blob([result], { type: 'model/gltf-binary' });
-            this._saveBlob(blob, `${name}.glb`);
-          } else {
-            const json = JSON.stringify(result);
-            const blob = new Blob([json], { type: 'model/gltf+json' });
-            this._saveBlob(blob, `${name}.gltf`);
-          }
-
-          this._showToast(`Done (${((Date.now()-started)/1000).toFixed(1)}s)`);
-          this._hapticBoth(0.5, 60);
-          setTimeout(()=>this._showToast(''), 1200);
-        },
-        (err) => {
-          hidden.forEach(h => h.o.visible = h.v);
-          console.warn('[dual-grip-exporter] Export failed:', err);
-          this._showToast('Export failed');
-        },
-        { binary: this.data.binary, onlyVisible: true, embedImages: true }
-      );
-    } catch (e) {
-      hidden.forEach(h => h.o.visible = h.v);
-      console.warn('[dual-grip-exporter] Exception:', e);
-      this._showToast('Export error');
-    }
-  },
-
-  _saveBlob(blob, filename){
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
-  },
-
-  // ---------- feedback ----------
-  _hapticBoth(intensity=0.4, durationMs=20){
-    [this.left, this.right].forEach(h => {
-      const gp = h && h.components['tracked-controls']?.controller;
-      const act = gp && gp.hapticActuators && gp.hapticActuators[0];
-      if (act?.pulse) { try { act.pulse(intensity, durationMs); } catch(_e){} }
-    });
-  },
-
-  _ensureToast(){
-    if (this._toast) return;
-    const t = document.createElement('a-entity');
-    t.setAttribute('position', '0 1.8 -0.6');
-    t.setAttribute('text', 'value: ; align: center; color: #111; width: 2.2');
-    t.setAttribute('visible', false);
-    this.el.sceneEl.appendChild(t);
-    this._toast = t;
-  },
-
-  _showToast(msg){
-    if (!this.data.showToast) return;
-    if (!this._toast) this._ensureToast();
-    this._toast.setAttribute('text', 'value', msg || '');
-    this._toast.setAttribute('visible', !!msg);
   }
 });

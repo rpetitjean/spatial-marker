@@ -11,16 +11,15 @@
     <script src="https://unpkg.com/aframe-environment-component@1.5.x/dist/aframe-environment-component.min.js"></script>
 
     <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.6.0/dist/aframe-extras.min.js"></script>
- <script src="https://cdn.jsdelivr.net/gh/AdaRoseCannon/aframe-xr-boilerplate/simple-navmesh-constraint.js"></script>
-
-
+    <script src="https://cdn.jsdelivr.net/gh/AdaRoseCannon/aframe-xr-boilerplate/simple-navmesh-constraint.js"></script>
+    <link rel="stylesheet" href="github.css">
 
   </head>
   
 
   <body>
 
-    <a-scene light="defaultLightsEnabled: false">
+  <a-scene light="defaultLightsEnabled: false">
 
   <a-assets>
     <a-asset-item id="env" src="assets/env-photographs.glb"></a-asset-item>
@@ -29,7 +28,7 @@
    <audio id="click" src="assets/camera.mp3" preload="auto"></audio>
   </a-assets>
 
-          <!-- PC & VR Rig -->
+<!-- VR Rig -->
 <a-entity id="rig" 
 spatial-marker
 picture-camera-capture="leftHand:#left-hand; rightHand:#right-hand; pictureCam:#picture-camera; hotkeys: KeyP,KeyS; enableDblClick: true; pxWidth:2000; aspect:4:3" 
@@ -261,6 +260,15 @@ AFRAME.registerComponent('picture-camera-capture', {
   }
 });
 </script>
+
+<a class="github-fab"
+   href="https://github.com/rpetitjean/spatial-marker/blob/main/examples/export-photos.html"
+   target="_blank"
+   rel="noopener noreferrer"
+   aria-label="Open source code on GitHub">
+  <span class="gh-dot" aria-hidden="true"></span>
+  <span class="gh-label">Source</span>
+</a>
 
   </body>
 </html>

@@ -1,0 +1,326 @@
+#ui-topright{
+  position:fixed; top:16px; right:16px; z-index:9999;
+}
+.ui-circle{
+  width:44px; height:44px; border-radius:999px;
+  border:1px solid rgba(0,0,0,.15);
+  background: rgba(255,255,255,.8);
+  backdrop-filter: blur(6px);
+  display:grid; place-items:center;
+  cursor:pointer;
+}
+.ui-circle svg{ width:22px; height:22px; display:block; }
+
+
+  /* Overlay is created but kept hidden until intro-start */
+ /* =========================================================
+   INFO OVERLAY — works with your CURRENT JS (display:block)
+   No HTML / JS changes needed
+   ========================================================= */
+
+/* Hidden by default (your JS will set display:block) */
+#info-overlay{
+  position: fixed;
+  inset: 0;
+  display: none;               /* JS overrides to block */
+  z-index: 99998;
+  pointer-events: auto;
+
+  /* background */
+  background: rgba(0,0,0,.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* When your JS opens it (overlay.style.display='block') */
+#info-overlay[style*="display: block"]{
+  animation: infoOverlayFadeIn 220ms ease both;
+}
+
+/* Center the modal WITHOUT needing flex/grid on the overlay */
+#info-modal{
+  position: absolute;
+  top: 50%;
+  left: 50%;
+
+  /* centered */
+  transform: translate(-50%, -50%) translateY(10px) scale(.985);
+  opacity: 0;
+
+  /* size */
+  width: min(860px, calc(100vw - 28px));
+  max-height: min(82vh, 780px);
+
+  /* look */
+  background: rgba(255,255,255,.92);
+  color: #000;
+  border-radius: 18px;
+  border: 1px solid rgba(0,0,0,.12);
+  overflow: hidden;
+  box-shadow:
+    0 22px 60px rgba(0,0,0,.28),
+    0 1px 0 rgba(255,255,255,.65) inset;
+
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* Modal animation when opened */
+#info-overlay[style*="display: block"] #info-modal{
+  animation: infoModalIn 320ms cubic-bezier(.2,.9,.2,1) both;
+}
+
+/* Header image */
+#info-gif{
+  width: 100%;
+  height: clamp(150px, 22vh, 260px);
+  object-fit: cover;
+  display: block;
+}
+
+/* Scrollable content (scrollbar should NOT live inside padding) */
+#info-content{
+  padding: 0; /* IMPORTANT: no padding on the scroller */
+  max-height: calc(min(82vh, 780px) - clamp(150px, 22vh, 260px));
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+
+
+
+
+
+/* Menu layout (nice on desktop + mobile) */
+/* Give padding to the menu + detail instead of the scroll container */
+#info-menu{
+  padding: 14px 16px 16px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+#info-detail{
+  padding: 14px 16px 16px;
+}
+
+
+@media (min-width: 720px){
+  #info-menu{
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+}
+/* Title inside the menu */
+.info-menu-title{
+  grid-column: 1 / -1;          /* ✅ spans full width even when menu is 2 columns */
+  text-align: center;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  font-size: clamp(12px, 2vw, 18px);
+
+  margin: 4px 0 6px;
+  padding: 10px 12px;
+
+  border-radius: 14px;
+
+
+}
+
+
+
+/* Buttons centered inside the modal */
+.info-link{
+  width: 100%;
+  min-height: 46px;
+  padding: 12px 14px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;   /* ✅ centered */
+  text-align: center;
+
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,.12);
+  background: rgba(255,255,255,.94);
+
+  cursor: pointer;
+  user-select: none;
+
+  font-weight: 650;
+  color: rgba(0,0,0,.86);
+
+  box-shadow:
+    0 10px 24px rgba(0,0,0,.10),
+    0 1px 0 rgba(255,255,255,.7) inset;
+
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.info-link:hover{
+  transform: translateY(-1px);
+  border-color: rgba(0,0,0,.18);
+  box-shadow:
+    0 14px 34px rgba(0,0,0,.16),
+    0 1px 0 rgba(255,255,255,.75) inset;
+}
+
+.info-link:active{
+  transform: translateY(0);
+  box-shadow:
+    0 8px 18px rgba(0,0,0,.12),
+    0 1px 0 rgba(255,255,255,.6) inset;
+}
+
+.info-link:focus-visible,
+#info-back:focus-visible{
+  outline: 3px solid rgba(0,120,255,.35);
+  outline-offset: 2px;
+}
+
+/* Detail view */
+#info-title{
+  margin: 12px 0 8px;
+  font-weight: 600;
+  font-size: clamp(18px, 2.2vw, 22px);
+  letter-spacing: -0.01em;
+}
+
+#info-text{
+  font-weight: 400;
+  font-size: clamp(14px, 1.8vw, 16px);
+  line-height: 1.55;
+  color: rgba(0,0,0,.82);
+  overflow: visible;
+  padding-bottom: 24px;
+}
+
+/* Back button */
+#info-back{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  margin-bottom: 10px;
+  padding: 10px 12px;
+
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,.12);
+  background: rgba(255,255,255,.94);
+
+  cursor: pointer;
+  font-weight: 800;
+  color: rgba(0,0,0,.85);
+
+  box-shadow:
+    0 10px 22px rgba(0,0,0,.08),
+    0 1px 0 rgba(255,255,255,.7) inset;
+
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+#info-back:hover{
+  transform: translateY(-1px);
+  border-color: rgba(0,0,0,.18);
+  box-shadow:
+    0 14px 30px rgba(0,0,0,.12),
+    0 1px 0 rgba(255,255,255,.75) inset;
+}
+
+/* Mobile tightening */
+@media (max-width: 420px){
+  #info-modal{
+    width: calc(100vw - 20px);
+    border-radius: 16px;
+    max-height: 86vh;
+  }
+  #info-gif{ height: 140px; }
+  .info-link{ min-height: 44px; padding: 11px 12px; border-radius: 13px; }
+}
+
+/* Animations */
+@keyframes infoOverlayFadeIn{
+  from{ opacity: 0; }
+  to  { opacity: 1; }
+}
+
+@keyframes infoModalIn{
+  from{ opacity: 0; transform: translate(-50%, -50%) translateY(14px) scale(.985); }
+  to  { opacity: 1; transform: translate(-50%, -50%) translateY(0) scale(1); }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce){
+  #info-overlay[style*="display: block"]{ animation: none !important; }
+  #info-overlay[style*="display: block"] #info-modal{ animation: none !important; opacity:1; transform: translate(-50%,-50%); }
+}
+
+/* =========================
+   Language toggle (FR / EN)
+   ========================= */
+
+#info-lang-toggle{
+  grid-column: 1 / -1;               /* full width above menu */
+  justify-self: center;
+
+  width: fit-content;
+  min-width: 96px;
+
+  padding: 6px 14px;
+  margin: 6px auto 2px;
+
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+
+  color: rgba(0,0,0,.72);
+  background: rgba(255,255,255,.65);
+
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,.12);
+
+  box-shadow:
+    0 4px 12px rgba(0,0,0,.10),
+    0 1px 0 rgba(255,255,255,.6) inset;
+
+  cursor: pointer;
+  user-select: none;
+
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease,
+    transform 120ms ease;
+}
+
+/* Hover / focus */
+#info-lang-toggle:hover{
+  background: rgba(255,255,255,.85);
+  color: rgba(0,0,0,.9);
+  box-shadow:
+    0 6px 18px rgba(0,0,0,.14),
+    0 1px 0 rgba(255,255,255,.75) inset;
+  transform: translateY(-1px);
+}
+
+#info-lang-toggle:active{
+  transform: translateY(0);
+  box-shadow:
+    0 3px 8px rgba(0,0,0,.12),
+    0 1px 0 rgba(255,255,255,.5) inset;
+}
+
+/* Keyboard accessibility */
+#info-lang-toggle:focus-visible{
+  outline: 3px solid rgba(0,120,255,.35);
+  outline-offset: 3px;
+}
+
+/* Mobile tuning */
+@media (max-width: 420px){
+  #info-lang-toggle{
+    font-size: 12px;
+    padding: 5px 12px;
+    min-width: 88px;
+  }
+}

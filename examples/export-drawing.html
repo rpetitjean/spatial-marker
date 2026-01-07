@@ -7,6 +7,7 @@
     
     <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
     <script src="https://rpetitjean.github.io/spatial-marker/spatial-marker.js"></script>
+    <link rel="stylesheet" href="github.css">
     
     <script type="importmap">
 
@@ -24,7 +25,7 @@
 
     <a-scene background="color: #ECECEC">
 
-          <!-- PC & VR Rig -->
+      <!-- VR Rig -->
     <a-entity  id="rig" spatial-marker>
       <a-box id="camera" camera="fov:75; near: 0.1; far: 700"  position="0 1.7 0" visible="false" ></a-box>
       <a-entity id="left-hand"  meta-touch-controls="hand: left"></a-entity>
@@ -35,6 +36,7 @@
 
     </a-scene>
 
+<!-- Three.js Script to export drawing -->
 <script type="module">
   import * as THREE from 'https://unpkg.com/three@0.173.0/build/three.module.js';
   import { GLTFExporter } from 'https://unpkg.com/three@0.173.0/examples/jsm/exporters/GLTFExporter.js';
@@ -294,6 +296,14 @@ resizeHandle.addEventListener('pointermove', e=>{
   ['gripup','squeezeend'  ].forEach(ev=>{ left?.addEventListener(ev,onRelease); right?.addEventListener(ev,onRelease); });
 </script>
 
+<a class="github-fab"
+   href="https://github.com/rpetitjean/spatial-marker/blob/main/examples/export-drawing.html"
+   target="_blank"
+   rel="noopener noreferrer"
+   aria-label="Open source code on GitHub">
+  <span class="gh-dot" aria-hidden="true"></span>
+  <span class="gh-label">Source</span>
+</a>
 
   </body>
 </html>
