@@ -999,9 +999,14 @@ AFRAME.registerComponent('bgm-manager', {
 <script>
 AFRAME.registerComponent('laser-beam', {
   schema: {
-    length: { type: 'number', default: 0.6 },     // visual length of your cylinder
-    radius: { type: 'number', default: 0.0025 },  // visual radius
-    useRaycasterFar: { type: 'boolean', default: false } // if true, beam length = raycaster.far
+    length: { type: 'number', default: 0.6 },
+    radius: { type: 'number', default: 0.0025 },
+    useRaycasterFar: { type: 'boolean', default: false },
+
+    // NEW: color fade
+    idleColor:  { type: 'color', default: '#ffffff' },
+    hoverColor: { type: 'color', default: '#00ff66' },
+    fadeSpeed:  { type: 'number', default: 18 } // per second, higher = faster
   },
 
   init() {
@@ -1014,41 +1019,89 @@ AFRAME.registerComponent('laser-beam', {
       segmentsRadial: 18
     });
 
-    // Reused objects
+    // Reused objects for alignment
     this._up = new THREE.Vector3(0, 1, 0);
     this._dir = new THREE.Vector3();
     this._origin = new THREE.Vector3();
     this._q = new THREE.Quaternion();
+
+    // Color state
+    this._idle = new THREE.Color(this.data.idleColor);
+    this._hover = new THREE.Color(this.data.hoverColor);
+    this._current = this._idle.clone();
+    this._target = this._idle.clone();
+
+    this._isHovering = false;
+
+    // Listen to parent raycaster intersections
+    const parent = this.el.parentEl;
+    this._onHit = (e) => {
+      const els = (e.detail && e.detail.els) || [];
+      this._isHovering = !!els[0];
+      this._target.copy(this._isHovering ? this._hover : this._idle);
+    };
+    this._onClear = () => {
+      this._isHovering = false;
+      this._target.copy(this._idle);
+    };
+
+    parent.addEventListener('raycaster-intersection', this._onHit);
+    parent.addEventListener('raycaster-intersection-cleared', this._onClear);
+
+    // ensure initial color
+    this.el.setAttribute('material', 'color', `#${this._current.getHexString()}`);
   },
 
-  tick() {
+  remove() {
+    const parent = this.el.parentEl;
+    if (parent) {
+      parent.removeEventListener('raycaster-intersection', this._onHit);
+      parent.removeEventListener('raycaster-intersection-cleared', this._onClear);
+    }
+  },
+
+  update(oldData) {
+    // keep colors in sync if changed via attributes
+    this._idle.set(this.data.idleColor);
+    this._hover.set(this.data.hoverColor);
+    if (!this._isHovering) this._target.copy(this._idle);
+    else this._target.copy(this._hover);
+  },
+
+  tick(time, dt) {
     const parent = this.el.parentEl;
     const rc = parent && parent.components && parent.components.raycaster;
     if (!rc) return;
 
     const d = rc.data;
 
-    // direction & origin are in the PARENT's local space (same space the raycaster line uses)
+    // ----- alignment (exactly matches raycaster line) -----
     this._dir.set(d.direction.x, d.direction.y, d.direction.z);
     if (this._dir.lengthSq() < 1e-8) return;
     this._dir.normalize();
 
     this._origin.set(d.origin.x, d.origin.y, d.origin.z);
 
-    const len = this.data.useRaycasterFar ? (Number.isFinite(d.far) ? d.far : 1000) : this.data.length;
+    const len = this.data.useRaycasterFar
+      ? (Number.isFinite(d.far) ? d.far : 1000)
+      : this.data.length;
 
-    // Center the cylinder on the ray (so it spans from origin -> origin+dir*len)
     this.el.object3D.position.copy(this._origin).addScaledVector(this._dir, len * 0.5);
-
-    // Rotate cylinder so its +Y axis points along the ray direction
     this._q.setFromUnitVectors(this._up, this._dir);
     this.el.object3D.quaternion.copy(this._q);
-
-    // Scale: base radius/height are 1, so scale sets final size
     this.el.object3D.scale.set(this.data.radius, len, this.data.radius);
+
+    // ----- fast color fade -----
+    const dtSec = dt / 1000;
+    const k = 1 - Math.exp(-this.data.fadeSpeed * dtSec); // smooth + framerate-independent
+    this._current.lerp(this._target, k);
+
+    // Apply to material (A-Frame material component)
+    this.el.setAttribute('material', 'color', `#${this._current.getHexString()}`);
   }
 });
 </script>
+
 
 
   </head>
@@ -1623,7 +1676,8 @@ raycaster="objects: .clickable">
           cursor="rayOrigin: entity; fuse: false">
 
   <a-entity class="laser-beam"
-            laser-beam="length: 0.6; radius: 0.0025"
+            laser-beam="length: 0.6; radius: 0.0025; useRaycasterFar: false;
+                      idleColor: #ffffff; hoverColor: #00ff66; fadeSpeed: 18"
             material="shader: flat; src: #line; color: #0d00ff; transparent: true; opacity: 0.95">
   </a-entity>
 
@@ -1635,7 +1689,8 @@ raycaster="objects: .clickable">
           cursor="rayOrigin: entity; fuse: false">
 
   <a-entity class="laser-beam"
-            laser-beam="length: 0.6; radius: 0.0025"
+            laser-beam="length: 0.6; radius: 0.0025; useRaycasterFar: false;
+                      idleColor: #ffffff; hoverColor: #00ff66; fadeSpeed: 18"
             material="shader: flat; src: #line; color: #0d00ff; transparent: true; opacity: 0.95">
   </a-entity>
 
