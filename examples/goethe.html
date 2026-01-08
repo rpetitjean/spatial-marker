@@ -843,6 +843,7 @@ this.palettes = {
 });
 
 </script>
+
 <!-- Flat-override component : sets opacity for written texts -->
 <script>
 AFRAME.registerComponent('flat-override', {
@@ -887,231 +888,6 @@ AFRAME.registerComponent('flat-override', {
 });
 </script>
 
-<!-- VR Gradient for laser -->
-<script>
-/* --- Gradient-textured laser shader (uses your #line texture) --- */
-AFRAME.registerShader('laser-gradient', {
-  schema: {
-    src:      { type: 'map' },
-    color:    { type: 'color', default: '#111111' },
-    opacity:  { type: 'number', default: 1.0 },
-    emissive: { type: 'number', default: 1.0 }
-  },
-
-  init: function (data) {
-    this.material = new THREE.ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-      uniforms: {
-        map:     { value: data.src || null },
-        tint:    { value: new THREE.Color(data.color) },
-        opacity: { value: data.opacity },
-        emissive:{ value: data.emissive }
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        void main(){
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform sampler2D map;
-        uniform vec3 tint;
-        uniform float opacity;
-        uniform float emissive;
-        varying vec2 vUv;
-
-        void main(){
-          vec4 t = texture2D(map, vUv);
-
-          // Extra soft fade near the "tip" (vUv.y ~ 1 on cylinder height)
-          float tipFade = smoothstep(1.0, 0.75, vUv.y);
-
-          float a = t.a * opacity * tipFade;
-          if (a < 0.01) discard;
-
-          vec3 rgb = (t.rgb * tint) * emissive;
-          gl_FragColor = vec4(rgb, a);
-        }
-      `
-    });
-  },
-
-  update: function (data) {
-    if (!this.material) return;
-    if (data.src) this.material.uniforms.map.value = data.src;
-    this.material.uniforms.tint.value.set(data.color);
-    this.material.uniforms.opacity.value = data.opacity;
-    this.material.uniforms.emissive.value = data.emissive;
-    this.material.needsUpdate = true;
-  }
-});
-
-
-/* --- VR hand laser that clicks .clickable, with hover/click colors + zone disable --- */
-AFRAME.registerComponent('hand-laser', {
-  schema: {
-    // visuals
-    length:      { type: 'number', default: 6.0 },
-    radius:      { type: 'number', default: 0.008 },
-    yOffset:     { type: 'number', default: 0.0 },   // optional hand offset
-    opacity:     { type: 'number', default: 0.55 },
-    emissive:    { type: 'number', default: 1.2 },
-    texture:     { type: 'selector', default: '#line' },
-
-    // colors
-    colorIdle:   { type: 'color', default: '#0b0b0b' },
-    colorHover:  { type: 'color', default: '#ff7a18' },
-    colorClick:  { type: 'color', default: '#0841f0' },
-
-    // behavior
-    objects:     { type: 'string', default: '.clickable' },
-    disableInZones: { type: 'boolean', default: true }
-  },
-
-  init: function () {
-    this.sceneEl = this.el.sceneEl;
-    this.isVR = false;
-    this.zoneActive = false;
-    this.hovering = false;
-    this.pressing = false;
-    this.hitEl = null;
-
-    // Ensure raycaster exists (laser-controls usually adds one, but we enforce settings)
-    this.el.setAttribute('raycaster', `objects: ${this.data.objects}; far: ${this.data.length}; interval: 0`);
-    this.el.setAttribute('cursor', 'rayOrigin: entity; fuse: false');
-
-    // Try to kill the default laser-controls line (we’ll render our own)
-    // (laser-controls may re-add it; we keep it invisible)
-    this.el.setAttribute('line', 'opacity: 0; visible: false');
-
-    // Build the cylinder laser mesh as a child entity
-    this.laserEl = document.createElement('a-entity');
-    this.laserEl.setAttribute('visible', false);
-    this.laserEl.setAttribute('position', `0 ${this.data.yOffset} 0`);
-
-    // Cylinder is along Y by default; rotate so it points down -Z
-    this.laserEl.setAttribute('geometry', {
-      primitive: 'cylinder',
-      radius: this.data.radius,
-      height: this.data.length,
-      segmentsRadial: 18,
-      openEnded: true
-    });
-    this.laserEl.setAttribute('rotation', '90 0 0');               // now height goes along Z
-    this.laserEl.setAttribute('position', `0 ${this.data.yOffset} ${-this.data.length/2}`); // push forward
-
-    this.laserEl.setAttribute('material', {
-      shader: 'laser-gradient',
-      src: this.data.texture,
-      color: this.data.colorIdle,
-      opacity: this.data.opacity,
-      emissive: this.data.emissive
-    });
-
-    this.el.appendChild(this.laserEl);
-
-    // Raycaster hover
-    this.onIntersect = (e) => {
-      const els = (e.detail && e.detail.els) || [];
-      this.hitEl = els[0] || null;
-      this.hovering = !!this.hitEl;
-      this._applyColor();
-    };
-
-    this.onIntersectCleared = () => {
-      this.hitEl = null;
-      this.hovering = false;
-      this._applyColor();
-    };
-
-    // Controller click (Meta Touch etc.)
-    this.onDown = () => {
-      this.pressing = true;
-      this._applyColor();
-      if (this.hitEl) {
-        // forward click so your existing fade-on-event works unchanged
-        this.hitEl.emit('click');
-      }
-    };
-
-    this.onUp = () => {
-      this.pressing = false;
-      this._applyColor();
-    };
-
-    this.el.addEventListener('raycaster-intersection', this.onIntersect);
-    this.el.addEventListener('raycaster-intersection-cleared', this.onIntersectCleared);
-    this.el.addEventListener('triggerdown', this.onDown);
-    this.el.addEventListener('triggerup', this.onUp);
-
-    // VR-only visibility
-    this.onEnterVR = () => { this.isVR = true;  this._refreshEnabled(); };
-    this.onExitVR  = () => { this.isVR = false; this._refreshEnabled(); };
-
-    this.sceneEl.addEventListener('enter-vr', this.onEnterVR);
-    this.sceneEl.addEventListener('exit-vr',  this.onExitVR);
-
-    // Disable inside your painting zones (your component emits goethe-zone-changed)
-    this.onZoneChanged = (e) => {
-      if (!this.data.disableInZones) return;
-      const name = e.detail && e.detail.name;   // 'blue', 'orange', ... or null
-      this.zoneActive = !!name;                 // any zone => disable lasers
-      this._refreshEnabled();
-    };
-    this.sceneEl.addEventListener('goethe-zone-changed', this.onZoneChanged);
-
-    // Initial state
-    this._refreshEnabled();
-    this._applyColor();
-  },
-
-  remove: function () {
-    this.el.removeEventListener('raycaster-intersection', this.onIntersect);
-    this.el.removeEventListener('raycaster-intersection-cleared', this.onIntersectCleared);
-    this.el.removeEventListener('triggerdown', this.onDown);
-    this.el.removeEventListener('triggerup', this.onUp);
-
-    if (this.sceneEl) {
-      this.sceneEl.removeEventListener('enter-vr', this.onEnterVR);
-      this.sceneEl.removeEventListener('exit-vr',  this.onExitVR);
-      this.sceneEl.removeEventListener('goethe-zone-changed', this.onZoneChanged);
-    }
-  },
-
-  _refreshEnabled: function () {
-    const enabled = this.isVR && !this.zoneActive;
-
-    this.laserEl.setAttribute('visible', enabled);
-
-    // hard-disable raycaster/cursor when off (prevents accidental interactions)
-    this.el.setAttribute('raycaster', 'enabled', enabled);
-    this.el.setAttribute('cursor', 'enabled', enabled);
-
-    // keep default line invisible
-    this.el.setAttribute('line', 'opacity: 0; visible: false');
-
-    if (!enabled) {
-      this.hitEl = null;
-      this.hovering = false;
-      this.pressing = false;
-      this._applyColor();
-    }
-  },
-
-  _applyColor: function () {
-    const c = this.pressing
-      ? this.data.colorClick
-      : (this.hovering ? this.data.colorHover : this.data.colorIdle);
-
-    if (this.laserEl) {
-      this.laserEl.setAttribute('material', 'color', c);
-    }
-  }
-});
-</script>
 
 <!-- Background Music Manager -->
 <script>
@@ -1785,25 +1561,13 @@ simple-navmesh-constraint="navmesh:.navmesh;fall:0;height:0;exclude:.navmesh-hol
 cursor="rayOrigin: mouse"
 raycaster="objects: .clickable">
 <a-box camera="far: 700; fov: 55; near: 0.1; active: true" position="0 1.7 0" visible="false" ></a-box>
-<a-entity id="left-hand" laser-controls="hand: left"
-          hand-laser="texture: #line;
-                      colorIdle: #0b0b0b;
-                      colorHover: #ff7a18;
-                      colorClick: #0841f0;
-                      opacity: 0.55;
-                      emissive: 1.2;
-                      length: 3;
-                      radius: 0.08;"></a-entity>
+<a-entity id="left-hand" laser-controls="hand: left">
+                  <a-cylinder id="line-controller" position="0 0 -0.28" rotation="-90 0 0" material="src: #line; color: #0d00ff; shader: flat; transparent: true; repeat: 1 1; opacity:0.95" geometry="openEnded: true" scale="0.0025 0.6 0.0025"></a-cylinder>
+</a-entity>
 
-<a-entity id="right-hand" laser-controls="hand: right"
-          hand-laser="texture: #line;
-                      colorIdle: #0b0b0b;
-                      colorHover: #ff7a18;
-                      colorClick: #0841f0;
-                      opacity: 0.55;
-                      emissive: 1.2;
-                      length: 3;
-                      radius: 0.08;"></a-entity>
+<a-entity id="right-hand" laser-controls="hand: right">
+                  <a-cylinder id="line-controller" position="0 0 -0.28" rotation="-90 0 0" material="src: #line; color: #0d00ff; shader: flat; transparent: true; repeat: 1 1; opacity:0.95" geometry="openEnded: true" scale="0.0025 0.6 0.0025"></a-cylinder>
+</a-entity>
 </a-entity>
 
  <!-- Sky -->
