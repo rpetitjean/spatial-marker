@@ -995,6 +995,62 @@ AFRAME.registerComponent('bgm-manager', {
 });
 </script>
 
+<!-- Laser-Beam script -->
+<script>
+AFRAME.registerComponent('laser-beam', {
+  schema: {
+    length: { type: 'number', default: 0.6 },     // visual length of your cylinder
+    radius: { type: 'number', default: 0.0025 },  // visual radius
+    useRaycasterFar: { type: 'boolean', default: false } // if true, beam length = raycaster.far
+  },
+
+  init() {
+    // Build cylinder once (axis = +Y by default)
+    this.el.setAttribute('geometry', {
+      primitive: 'cylinder',
+      height: 1,
+      radius: 1,
+      openEnded: true,
+      segmentsRadial: 18
+    });
+
+    // Reused objects
+    this._up = new THREE.Vector3(0, 1, 0);
+    this._dir = new THREE.Vector3();
+    this._origin = new THREE.Vector3();
+    this._q = new THREE.Quaternion();
+  },
+
+  tick() {
+    const parent = this.el.parentEl;
+    const rc = parent && parent.components && parent.components.raycaster;
+    if (!rc) return;
+
+    const d = rc.data;
+
+    // direction & origin are in the PARENT's local space (same space the raycaster line uses)
+    this._dir.set(d.direction.x, d.direction.y, d.direction.z);
+    if (this._dir.lengthSq() < 1e-8) return;
+    this._dir.normalize();
+
+    this._origin.set(d.origin.x, d.origin.y, d.origin.z);
+
+    const len = this.data.useRaycasterFar ? (Number.isFinite(d.far) ? d.far : 1000) : this.data.length;
+
+    // Center the cylinder on the ray (so it spans from origin -> origin+dir*len)
+    this.el.object3D.position.copy(this._origin).addScaledVector(this._dir, len * 0.5);
+
+    // Rotate cylinder so its +Y axis points along the ray direction
+    this._q.setFromUnitVectors(this._up, this._dir);
+    this.el.object3D.quaternion.copy(this._q);
+
+    // Scale: base radius/height are 1, so scale sets final size
+    this.el.object3D.scale.set(this.data.radius, len, this.data.radius);
+  }
+});
+</script>
+
+
   </head>
 
   <body>
@@ -1561,13 +1617,30 @@ simple-navmesh-constraint="navmesh:.navmesh;fall:0;height:0;exclude:.navmesh-hol
 cursor="rayOrigin: mouse"
 raycaster="objects: .clickable">
 <a-box camera="far: 700; fov: 55; near: 0.1; active: true" position="0 1.7 0" visible="false" ></a-box>
-<a-entity id="left-hand" laser-controls="hand: left">
-                  <a-cylinder id="line-controller" position="0 0 -0.28" rotation="-90 0 0" material="src: #line; color: #0d00ff; shader: flat; transparent: true; repeat: 1 1; opacity:0.95" geometry="openEnded: true" scale="0.0025 0.6 0.0025"></a-cylinder>
+<a-entity id="left-hand"
+          laser-controls="hand: left"
+          raycaster="objects: .clickable; far: 6; showLine: false"
+          cursor="rayOrigin: entity; fuse: false">
+
+  <a-entity class="laser-beam"
+            laser-beam="length: 0.6; radius: 0.0025"
+            material="shader: flat; src: #line; color: #0d00ff; transparent: true; opacity: 0.95">
+  </a-entity>
+
 </a-entity>
 
-<a-entity id="right-hand" laser-controls="hand: right">
-                  <a-cylinder id="line-controller" position="0 0 -0.28" rotation="-90 0 0" material="src: #line; color: #0d00ff; shader: flat; transparent: true; repeat: 1 1; opacity:0.95" geometry="openEnded: true" scale="0.0025 0.6 0.0025"></a-cylinder>
+<a-entity id="right-hand"
+          laser-controls="hand: right"
+          raycaster="objects: .clickable; far: 6; showLine: false"
+          cursor="rayOrigin: entity; fuse: false">
+
+  <a-entity class="laser-beam"
+            laser-beam="length: 0.6; radius: 0.0025"
+            material="shader: flat; src: #line; color: #0d00ff; transparent: true; opacity: 0.95">
+  </a-entity>
+
 </a-entity>
+
 </a-entity>
 
  <!-- Sky -->
