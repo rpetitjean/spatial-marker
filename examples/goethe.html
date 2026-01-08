@@ -720,7 +720,7 @@ AFRAME.registerComponent('shimmer-material', {
 });
 </script>
 
-<!-- Goethe Zones script, react to rig's position in the 6 different color zones to set up the color palette -->
+<!-- Goethe Zones script, react to rig's position in the 6 different color zones to set up the colour palette -->
 <script>
 AFRAME.registerComponent('goethe-zones', {
   schema: {
@@ -843,7 +843,6 @@ this.palettes = {
 });
 
 </script>
-
 <!-- Flat-override component : sets opacity for written texts -->
 <script>
 AFRAME.registerComponent('flat-override', {
@@ -1223,7 +1222,6 @@ AFRAME.registerComponent('bgm-manager', {
   </head>
 
   <body>
-
 
   <div id="ui-topright">
   <button id="btn-music" class="ui-circle" aria-label="Toggle music" title="Music">
@@ -1693,13 +1691,13 @@ window.addEventListener('DOMContentLoaded', () => {
     light="defaultLightsEnabled: false" 
     background="color: #ffffff" 
     renderer="colorManagement: true; physicallyCorrectLights: true" 
-    goethe-zones="rig: #rig"  
+    goethe-zones
     bgm-manager="src: assets/goethe-colors/FranzLiszt_Berceuse_D_FlatMajor_174_ScoreToMIDI_CC0_compressed.mp3;
                volume: 0.75;
                fadeInMs: 900;
                fadeOutMs: 600;
                pauseWhenHidden: true"
-    intro-overlay="
+    intro-overlayy="
     backgroundColor: #ffffff;
     textColor: #000000;
     fontFamily: system-ui;
@@ -1745,7 +1743,10 @@ window.addEventListener('DOMContentLoaded', () => {
     <a-asset-item id="table" src="assets/goethe-colors/table.glb"></a-asset-item>
     <img id="diagram" src="assets/goethe-colors/upscale-diagram_png512.png">
     <a-asset-item id="goethe" src="assets/goethe-colors/goethe.glb"></a-asset-item>
-    <a-asset-item id="book" src="assets/goethe-colors/Theory-Book.glb"></a-asset-item>
+
+    <a-asset-item id="theory-of-color-info" src="assets/goethe-colors/theoryofcolors.glb"></a-asset-item>
+    <a-asset-item id="diagram-info" src="assets/goethe-colors/colordiagram.glb"></a-asset-item>
+    <a-asset-item id="JW-Goetheinfo" src="assets/goethe-colors/goethe-written.glb"></a-asset-item>
     
     <a-asset-item id="navmesh-blue" src="assets/goethe-colors/navmesh-blue.glb"></a-asset-item>
     <a-asset-item id="navmesh-green" src="assets/goethe-colors/navmesh-green.glb"></a-asset-item>
@@ -1754,12 +1755,7 @@ window.addEventListener('DOMContentLoaded', () => {
     <a-asset-item id="navmesh-red" src="assets/goethe-colors/navmesh-red.glb"></a-asset-item>
     <a-asset-item id="navmesh-yellow" src="assets/goethe-colors/navmesh-yellow.glb"></a-asset-item>
 
-    <a-asset-item id="element-blue" src="assets/goethe-colors/elements/blue-element.glb"></a-asset-item>
-    <a-asset-item id="element-green" src="assets/goethe-colors/elements/green-element.glb"></a-asset-item>
-    <a-asset-item id="element-indigo" src="assets/goethe-colors/elements/indigo-element.glb"></a-asset-item>
-    <a-asset-item id="element-orange" src="assets/goethe-colors/elements/orange-element.glb"></a-asset-item>
-    <a-asset-item id="element-red" src="assets/goethe-colors/elements/red-element.glb"></a-asset-item>
-    <a-asset-item id="element-yellow" src="assets/goethe-colors/elements/yellow-element.glb"></a-asset-item>
+    <a-asset-item id="element-frame" src="assets/goethe-colors/frame-env.glb"></a-asset-item>
 
     <a-asset-item id="text1" src="assets/goethe-colors/texts-maker/text-JWGoether.glb"></a-asset-item>
     <a-asset-item id="text2" src="assets/goethe-colors/texts-maker/text-diagram.glb"></a-asset-item>
@@ -1780,9 +1776,10 @@ window.addEventListener('DOMContentLoaded', () => {
 
   </a-assets>
 
-          <!--VR Rig -->
+<!--VR Rig -->
 <a-entity id="rig" 
-spatial-marker
+spatial-marker=""
+movement-controls="constrainToNavMesh: true ; speed : 0.5; controls: keyboard; enabled:true"  
 position="-0.8 0 3.6" rotation="0 -20 0"
 simple-navmesh-constraint="navmesh:.navmesh;fall:0;height:0;exclude:.navmesh-hole; "
 cursor="rayOrigin: mouse"
@@ -1795,8 +1792,8 @@ raycaster="objects: .clickable">
                       colorClick: #0841f0;
                       opacity: 0.55;
                       emissive: 1.2;
-                      length: 6;
-                      radius: 0.008;"></a-entity>
+                      length: 3;
+                      radius: 0.08;"></a-entity>
 
 <a-entity id="right-hand" laser-controls="hand: right"
           hand-laser="texture: #line;
@@ -1805,8 +1802,8 @@ raycaster="objects: .clickable">
                       colorClick: #0841f0;
                       opacity: 0.55;
                       emissive: 1.2;
-                      length: 6;
-                      radius: 0.008;"></a-entity>
+                      length: 3;
+                      radius: 0.08;"></a-entity>
 </a-entity>
 
  <!-- Sky -->
@@ -1821,53 +1818,31 @@ raycaster="objects: .clickable">
 <a-entity gltf-model="#env" rotation="0 -90 0" position="0 0 0" shadow=""></a-entity>
 <a-entity gltf-model="#navmesh" rotation="0 -90 0" position="0 0 0" visible="false" class="navmesh"></a-entity>
 <a-entity geometry="primitive: ring; radiusInner: 0.6" rotation="90 -9.55 0" position="0 3.5593 0" scale="6.1595 6.1595 6.1595" shadow="" id="extra-light-hidder"></a-entity>
+<a-entity geometry="primitive: ring; radiusInner: 0.6" rotation="90 -9.55 0" position="-0.04525 3.47416 0.02118" scale="3.40291 3.40291 3.40291" shadow="" id="extra-light-hidder-2" material="opacity: 0; side: double; transparent: true"></a-entity>
 
 <!-- Goethe's bust + diagram + table -->  
-<a-entity id="goethe-bust" gltf-model="assets/goethe-colors/goethe.glb" rotation="0 -90 0" position="-0.00814 0.12423 0.01031" shadow="" class="clickable" gradient-color="color1: #0841f0; color3: #ff0000; color5: #37005c; color6: #ff4000; colorCount: 4; marbleMix: 0.16; roughness: 0.7; metalness: 1; speed: 0.7; originalMix: 0.94" fade-on-event="targets: #goethe-text; duration: 3; hold: 5; group: goetheTexts">
+<a-entity id="goethe-bust" gltf-model="assets/goethe-colors/goethe.glb" rotation="0 -90 0" position="-0.00814 -0.1474 0.01031" shadow="" class="clickable" 
+gradient-color="color1: #0841f0; color3: #ff0000; color5: #37005c; color6: #ff4000; colorCount: 4; roughness: 0.7; metalness: 1; speed: 0.7; originalMix: 0.94" 
+scale="1.2 1.2 1.2">
 </a-entity>
 
 <!-- Diagram plane → diagram text -->
-<a-entity id="diagram-element"
-          material="transparent: true; src: #diagram"
-          geometry="primitive: plane"
-          rotation="-90.00021045914971 62.589336582296 0"
-          position="-0.03296 0.81397 0"
-          shimmer-material="shimmerIntensity: 1.5"
-          class="clickable"
-          scale="1.12054 1.12054 1.12054"
-          fade-on-event="targets: #diagram-text;
-                         duration: 3;
-                         hold: 5;
-                         from: 0;
-                         to: 1;
-                         group: goetheTexts">
-</a-entity>
-
-<!-- Goethe book → theory text -->
-<a-entity id="goethe-book"
-          gltf-model="assets/goethe-colors/Theory-Book.glb"
-          rotation="0 -90 0"
-          position="-0.00824 0.10229 0"
-          scale="1 0.87903 1"
-          shadow=""
-          class="clickable"
-          gradient-color="color1: #bfbfbf; color2: #707070; color3: #787878; color4: #b5b5b5; color5: #ebebeb; color6: #a9b181; colorCount: 3; roughness: 0; metalness: 1; speed: 0.1; originalMix: 0"
-          fade-on-event="targets: #theory-text;
-                         duration: 3;
-                         hold: 5;
-                         from: 0;
-                         to: 1;
-                         group: goetheTexts">
+ <a-entity id="diagram-element" material="transparent: true; src: #diagram" geometry="primitive: plane" rotation="-90.00021045914971 62.589336582296 0" position="-0.03296 0.81439 0" shimmer-material="shimmerIntensity: 1.5" class="clickable" fade-on-event="targets: #diagram-text; duration: 3; hold: 5; group: goetheTexts"></a-entity>
+<a-entity id="diagram-big" material="transparent: true; src: #diagram" geometry="primitive: plane" rotation="-90.00021045914971 62.589336582296 0" position="-0.03296 0.01241 0" shimmer-material="shimmerIntensity: 1.5" class="clickable" scale="9 9 9">
 </a-entity>
 
 
+<a-entity id="element-Goethe" gltf-model="assets/goethe-colors/goethe-written.glb" position="0.38916 1.39795 0" flat-override="opacity: 0.2" fade-on-event="targets: #goethe-text; duration: 3; hold: 5; group: goetheTexts" class="clickable" scale="0.3 0.3 0.3" rotation="0 -90 0"></a-entity>
 
+<a-entity id="element-theory" gltf-model="assets/goethe-colors/theoryofcolors.glb" position="0.43605 1.18089 0" flat-override="opacity: 0.2" fade-on-event="targets: #diagram-text; duration: 3; hold: 5; group: goetheTexts" class="clickable" scale="0.3 0.3 0.3" rotation="0 -90 0"></a-entity>
+
+<a-entity id="element-diagram" gltf-model="assets/goethe-colors/colordiagram.glb" position="0.45782 0.99437 0" flat-override="opacity: 0.2" fade-on-event="targets: #theory-text; duration: 3; hold: 5; group: goetheTexts" class="clickable" scale="0.3 0.3 0.3" rotation="0 -90 0"></a-entity>
 <a-entity gltf-model="#table" rotation="0 -90 0" position="0 0 0" visible="true"></a-entity>
 
 
 <!-- navmeshs x6 -->
 <!-- ORANGE -->
-<a-entity id="navmesh-orange"
+<a-entity id="navmesh-orange-element"
           gltf-model="#navmesh-orange"
           rotation="0 -90 0"
           position="0 0 0"
@@ -1877,7 +1852,7 @@ raycaster="objects: .clickable">
 </a-entity>
 
 <!-- BLUE -->
-<a-entity id="navmesh-blue"
+<a-entity id="navmesh-blue-element"
           gltf-model="#navmesh-blue"
           rotation="0 -90 0"
           position="0 0 0"
@@ -1887,7 +1862,7 @@ raycaster="objects: .clickable">
 </a-entity>
 
 <!-- RED -->
-<a-entity id="navmesh-red"
+<a-entity id="navmesh-red-element"
           gltf-model="#navmesh-red"
           rotation="0 -90 0"
           position="0 0 0"
@@ -1897,7 +1872,7 @@ raycaster="objects: .clickable">
 </a-entity>
 
 <!-- YELLOW -->
-<a-entity id="navmesh-yellow"
+<a-entity id="navmesh-yellow-element"
           gltf-model="#navmesh-yellow"
           rotation="0 -90 0"
           position="0 0 0"
@@ -1907,7 +1882,7 @@ raycaster="objects: .clickable">
 </a-entity>
 
 <!-- GREEN -->
-<a-entity id="navmesh-green"
+<a-entity id="navmesh-green-element"
           gltf-model="#navmesh-green"
           rotation="0 -90 0"
           position="0 0 0"
@@ -1917,7 +1892,7 @@ raycaster="objects: .clickable">
 </a-entity>
 
 <!-- VIOLET / INDIGO -->
-<a-entity id="navmesh-indigo"
+<a-entity id="navmesh-indigo-element"
           gltf-model="#navmesh-indigo"
           rotation="0 -90 0"
           position="0 0 0"
@@ -1929,53 +1904,45 @@ raycaster="objects: .clickable">
 
 <!-- drawing space elements -->
 <!-- Orange Area -->
-<a-entity id="element-orange-area"
-          gltf-model="#element-orange"
-          rotation="0 -90 0"
-          position="0 0 0"
-          gradient-color="roughness: 0; color1: #ffffff; color2: #fff1e5; marbleMix: 0.1; opacity: 0; metalness: 1">
+<a-entity id="element-orange-area" 
+gltf-model="assets/goethe-colors/frame-env.glb" 
+position="0 1.56005 -6.24316" gradient-color="color1: #ffffff; color2: #fff1e5; opacity: 0; roughness: 0; metalness: 1" scale="0.5 0.5 0.5">
 </a-entity>
 
 <!-- Blue Area -->
-<a-entity id="element-blue-area"
-          gltf-model="#element-blue"
-          rotation="0 -90 0"
-          position="0 0 0"
-          gradient-color="color1: #ffffff; color2: #b6c1cd; roughness: 0; opacity: 0">
+<a-entity id="element-blue-area" 
+gltf-model="assets/goethe-colors/frame-env.glb" 
+rotation="0 -180 0" position="0 1.47372 6.31276" 
+gradient-color="color1: #ffffff; color2: #b6c1cd; opacity: 0; roughness: 0" scale="0.5 0.5 0.5">
 </a-entity>
 
 <!-- Red Area -->
-<a-entity id="element-red-area" gltf-model="assets/goethe-colors/elements/red-element.glb" rotation="0 -90 0" position="0 0.16267 0" gradient-color="color1: #ffffff; color2: #fff5f5; opacity: 0.1">
+<a-entity id="element-red-area" gltf-model="assets/goethe-colors/frame-env.glb" 
+rotation="0 62.931965343784235 90.00021045914971" position="-5.36705 1.47327 -2.98325" 
+gradient-color="color1: #ffffff; color2: #fff5f5; opacity: 0.1" scale="0.4 0.4 0.4">
 </a-entity>
 
 <!-- Yellow Area -->
-<a-entity id="element-yellow-area"
-          gltf-model="#element-yellow"
-          rotation="0 -90 0"
-          position="0 0 0"
-          gradient-color="color1: #ffffff; color2: #eae6d2; opacity: 0; metalness: 1; roughness: 0; marbleMix: 0.1">
+<a-entity id="element-yellow-area" 
+gltf-model="assets/goethe-colors/frame-env.glb" 
+rotation="0 -62 -90" position="5.43597 1.52474 -3.13707" 
+gradient-color="color1: #ffffff; color2: #eae6d2; opacity: 0; roughness: 0; metalness: 1" scale="0.4 0.4 0.4">
 </a-entity>
 
 <!-- Green Area -->
-<a-entity id="element-green-area"
-          gltf-model="#element-green"
-          rotation="0 -90 0"
-          position="0 0 0"
-          gradient-color="color1: #ffffff; color2: #f0fff0; opacity: 0">
+<a-entity id="element-green-area" 
+gltf-model="assets/goethe-colors/frame-env.glb" rotation="0 -119.01593912016487 0" 
+position="5.44141 1.79871 2.94187" gradient-color="color1: #ffffff; color2: #f0fff0; opacity: 0" scale="0.9 0.9 0.9">
 </a-entity>
 
-<!-- Violet Area -->
-<a-entity id="element-violet-area"
-          gltf-model="#element-indigo"
-          rotation="0 -90 0"
-          position="0 0 0"
-          gradient-color="color1: #ffffff; color2: #8b8494; roughness: 0; marbleMix: 0.1; opacity: 0">
-</a-entity>
+
 
 <!-- Marker-Texts -->
 <a-entity id="goethe-text" gltf-model="#text1" position="0.02691 1.816 -1.09926" scale="1.5 1.5 1.5" opacity="0" flat-override="color: #000000"></a-entity>
 <a-entity id="diagram-text" gltf-model="#text2" position="0.02691 1.816 -1.09926" scale="1.5 1.5 1.5" opacity="0" flat-override="color: #000000"></a-entity>
 <a-entity id="theory-text" gltf-model="#text3" position="0.02691 1.816 -1.09926" scale="1.5 1.5 1.5" opacity="0" flat-override="color: #000000"></a-entity>
+
+
 <a-entity id="edel" gltf-model="#edel" position="-0.37194 2.28755 -6.13326" flat-override="opacity: 0.52" scale="0.75 0.75 0.75"></a-entity>
 <a-entity id="gut" gltf-model="#gut" position="5.49982 2.42192 -3.10054" flat-override="opacity: 0.52" scale="0.75 0.75 0.75" rotation="0 -71.5990979107282 0"></a-entity>
 <a-entity id="nuztlich" gltf-model="#nuztlich" position="4.97181 2.28755 2.96997" flat-override="opacity: 0.52" scale="0.75 0.75 0.75" rotation="0 -126.8201972476418 0"></a-entity>

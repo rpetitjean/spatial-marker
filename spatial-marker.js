@@ -741,7 +741,8 @@ AFRAME.registerComponent('size-picker',{
   this.el.appendChild(p);
   this._hint = p;
   return p;
-},
+}
+,
 
   _refreshSideHint(){
     const p = this._ensureSideHint();

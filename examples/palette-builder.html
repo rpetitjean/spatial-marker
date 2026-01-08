@@ -153,7 +153,7 @@
     <div class="row" style="justify-content:space-between; margin-bottom:6px;">
       <div>
         <strong style="font-size:13px;">Step 2.</strong>
-        <span class="hint">Copy and paste these lines into your JS palette.</span>
+        <span class="hint">Copy and paste these lines as your palette values.</span>
       </div>
       <div class="row">
         <button id="copyBtn">Copy</button>
@@ -230,27 +230,11 @@ yellow: [<br>
       return inputs.map(i => i.value.toLowerCase());
     }
 
-    // Format like:
-    //        '#3f3300','#514000','#635000','#756000',
-    //        ...
-    function formatLines(colors){
-      const perLine = 4;
-      const lines = [];
-      const indent = '        '; // 8 spaces
+ function formatLines(colors){
+  return colors.join(',');
+}
 
-      const lastIndex = colors.length - 1;
-      for(let i=0;i<colors.length;i+=perLine){
-        const slice = colors.slice(i, i+perLine);
-        const parts = slice.map((c, idxInSlice) => {
-          const globalIdx = i + idxInSlice;
-          const isLast = (globalIdx === lastIndex);
-          // add trailing comma except very last color
-          return `'${c}'` + (isLast ? '' : ',');
-        });
-        lines.push(indent + parts.join(''));
-      }
-      return lines.join('\n');
-    }
+
 
     function updateOutput(){
       const colors = getColors();
