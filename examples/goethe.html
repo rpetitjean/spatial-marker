@@ -720,8 +720,55 @@ AFRAME.registerComponent('shimmer-material', {
 });
 </script>
 
-<!-- Goethe Zones script, react to rig's position in the 6 different color zones to set up the colour palette -->
+
+<!-- Goethe Zones script (with laser enable/disable event) + laser-zone-disable component -->
 <script>
+/* =========================================================
+   1) HAND LASER ENABLE/DISABLE (listens to scene event)
+   ========================================================= */
+AFRAME.registerComponent('laser-zone-disable', {
+  schema: {
+    beams: { type: 'string', default: '.beam' } // beam entities inside the hand
+  },
+
+  init() {
+    this.sceneEl = this.el.sceneEl;
+    this._enabled = true;
+
+    this._onLaserToggle = (e) => {
+      const enabled = !!(e.detail && e.detail.enabled);
+      if (enabled === this._enabled) return;
+      this._enabled = enabled;
+      this._apply();
+    };
+
+    this.sceneEl.addEventListener('laser-enabled-changed', this._onLaserToggle);
+
+    // Apply once after children exist
+    setTimeout(() => this._apply(), 0);
+  },
+
+  remove() {
+    if (this.sceneEl) {
+      this.sceneEl.removeEventListener('laser-enabled-changed', this._onLaserToggle);
+    }
+  },
+
+  _apply() {
+    // 1) disable interactions
+    this.el.setAttribute('raycaster', 'enabled', this._enabled);
+    this.el.setAttribute('cursor', 'enabled', this._enabled);
+
+    // 2) hide/show beams
+    const beams = this.el.querySelectorAll(this.data.beams);
+    beams.forEach(b => b.setAttribute('visible', this._enabled));
+  }
+});
+
+
+/* =========================================================
+   2) GOETHE ZONES (emits palette + emits laser enable/disable)
+   ========================================================= */
 AFRAME.registerComponent('goethe-zones', {
   schema: {
     rig: { type: 'selector', default: '#rig' }
@@ -797,6 +844,9 @@ AFRAME.registerComponent('goethe-zones', {
       { name: 'red',    el: document.querySelector('[gltf-model="#navmesh-red"]'),    box: null },
       { name: 'yellow', el: document.querySelector('[gltf-model="#navmesh-yellow"]'), box: null }
     ];
+
+    // ✅ ensures lasers are enabled at start (until we detect a zone)
+    this.el.emit('laser-enabled-changed', { enabled: true });
   },
 
   tick: function () {
@@ -829,19 +879,21 @@ AFRAME.registerComponent('goethe-zones', {
        ZONE CHANGED
        ========================= */
     const zoneName = activeZone ? activeZone.name : null;
+
+    // existing event you already use elsewhere
     this.el.emit('goethe-zone-changed', { name: zoneName });
 
+    // ✅ NEW: lasers enabled only when NOT inside a zone
+    this.el.emit('laser-enabled-changed', { enabled: !zoneName });
+
+    // palette updates
     if (activeZone && this.palettes[activeZone.name]) {
       const palette = this.palettes[activeZone.name].slice();
 
-      /* 🔥 IMPORTANT FIXES 🔥 */
+      // 1) Update spatial-marker with REAL array
+      rig.setAttribute('spatial-marker', { colors: palette });
 
-      // 1. Update spatial-marker with REAL array
-      rig.setAttribute('spatial-marker', {
-        colors: palette
-      });
-
-      // 2. Notify listeners (drawingZones, UI, etc.)
+      // 2) Notify listeners (drawingZones, UI, etc.)
       rig.emit('spatial-marker-colors-changed', {
         colors: palette,
         zone: activeZone.name
@@ -854,6 +906,7 @@ AFRAME.registerComponent('goethe-zones', {
   }
 });
 </script>
+
 
 <!-- Flat-override component : sets opacity for written texts -->
 <script>
@@ -1129,7 +1182,6 @@ AFRAME.registerComponent('laser-beam', {
   }
 });
 </script>
-
 
   </head>
 
@@ -1697,7 +1749,8 @@ simple-navmesh-constraint="navmesh:.navmesh;fall:0;height:0;exclude:.navmesh-hol
 cursor="rayOrigin: mouse"
 raycaster="objects: .clickable">
 <a-box camera="far: 700; fov: 55; near: 0.1; active: true" position="0 1.7 0" visible="false" ></a-box>
-<a-entity id="left-hand"
+
+<a-entity id="left-hand" laser-zone-disable
   laser-controls="hand: left"
   raycaster="objects: .clickable; far: 6; showLine: false"
   cursor="rayOrigin: entity; fuse: false"
@@ -1716,7 +1769,7 @@ raycaster="objects: .clickable">
   </a-entity>
 </a-entity>
 
-<a-entity id="right-hand"
+<a-entity id="right-hand" laser-zone-disable
   laser-controls="hand: right"
   raycaster="objects: .clickable; far: 6; showLine: false"
   cursor="rayOrigin: entity; fuse: false"
@@ -1762,7 +1815,7 @@ scale="1.2 1.2 1.2">
 
 <!-- Diagram plane → diagram text -->
  <a-entity id="diagram-element" material="transparent: true; src: #diagram" geometry="primitive: plane" rotation="-90.00021045914971 62.589336582296 0" position="-0.03296 0.81439 0" shimmer-material="shimmerIntensity: 1.5" class="clickable" fade-on-event="targets: #diagram-text; duration: 3; hold: 5; group: goetheTexts"></a-entity>
-<a-entity id="diagram-big" material="opacity: 0.6; transparent: true; src: #diagram" geometry="primitive: plane" rotation="-90.00021045914971 62.589336582296 0" position="-0.03296 0.01241 0" class="clickable" scale="9 9 9">
+<a-entity id="diagram-big" material="opacity: 0.6; transparent: true; src: #diagram" geometry="primitive: plane" rotation="-90.00021045914971 62.589336582296 0" position="-0.03296 0.01241 0" scale="9 9 9">
 </a-entity>
 
 
