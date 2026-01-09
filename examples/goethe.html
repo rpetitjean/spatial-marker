@@ -724,77 +724,78 @@ AFRAME.registerComponent('shimmer-material', {
 <script>
 AFRAME.registerComponent('goethe-zones', {
   schema: {
-    rig: {type: 'selector', default: '#rig'}
+    rig: { type: 'selector', default: '#rig' }
   },
 
   init: function () {
-    // the rig (where spatial-marker is)
     this.rig = this.data.rig || document.querySelector('#rig');
     this.currentZone = null;
     this._rigPos = new THREE.Vector3();
 
-    // Define your 24-color palettes here
-    // (put whatever 24 hex colors you want for each main color)
-this.palettes = {
-  blue: [
+    /* =========================
+       PALETTES (24 colors each)
+       ========================= */
+    this.palettes = {
+      blue: [
         '#081427','#3572ee','#0b1a33','#3a7aff',
         '#0f2244','#4584ff','#132a55','#4f8eff',
         '#163266','#5998ff','#193a77','#63a2ff',
         '#1d4288','#6dacff','#214a99','#77b6ff',
         '#2552aa','#81c0ff','#295abb','#8bcaFF',
         '#2d62cc','#95d4ff','#316add','#9fdeff'
-  ],
-  green: [
+      ],
+      green: [
         '#06210f','#36ca63','#0a2f16','#3ad86a',
         '#0e3d1d','#3fe672','#124c24','#49ec7a',
         '#165a2b','#54f283','#1a6832','#5ff88b',
         '#1e7639','#6aff94','#228440','#75ff9d',
         '#269247','#80ffa6','#2aa04e','#8bffaf',
         '#2eae55','#96ffb8','#32bc5c','#a1ffc1'
-  ],
-  indigo: [
+      ],
+      indigo: [
         '#130827','#6737b7','#1a0b33','#6e3bc3',
         '#210f3f','#7540cf','#28134b','#7c44db',
         '#2f1757','#8348e7','#361b63','#8a4cf3',
         '#3d1f6f','#9150ff','#44237b','#9b5aff',
         '#4b2787','#a564ff','#522b93','#af6eff',
         '#592f9f','#b978ff','#6033ab','#c382ff'
-  ],
-  orange: [
+      ],
+      orange: [
         '#2b1304','#ea7217','#3a1a05','#fa7a19',
         '#4a2206','#ff8423','#5a2a07','#ff8f35',
         '#6a3208','#ff9a47','#7a3a09','#ffa559',
         '#8a420b','#ffb06b','#9a4a0d','#ffbb7d',
         '#aa520f','#ffc68f','#ba5a11','#ffd1a1',
         '#ca6213','#ffdcb3','#da6a15','#ffe7c5'
-  ],
-  red: [
+      ],
+      red: [
         '#2b0404','#ea1717','#3a0505','#fa1919',
         '#4a0606','#ff2323','#5a0707','#ff3535',
         '#6a0808','#ff4747','#7a0909','#ff5959',
         '#8a0b0b','#ff6b6b','#9a0d0d','#ff7d7d',
         '#aa0f0f','#ff8f8f','#ba1111','#ffa1a1',
         '#ca1313','#ffb3b3','#da1515','#ffc5c5'
-  ],
-  yellow: [
+      ],
+      yellow: [
         '#3f3300','#f9cc00','#514000','#ffd11a',
         '#635000','#ffd633','#756000','#ffdb4d',
         '#877000','#ffe066','#998000','#ffe580',
         '#ab9000','#ffea99','#b89a00','#ffefb3',
         '#c5a400','#fff4cc','#d2ae00','#fff9e6',
         '#dfb800','#fffaf0','#ecc200','#fffdf7'
-  ]
-};
+      ]
+    };
 
-
-    // Navmesh zones for each Goethe color
+    /* =========================
+       ZONES (navmeshes)
+       ========================= */
     this.zones = [
-      {name: 'blue',   el: document.querySelector('[gltf-model="#navmesh-blue"]'),   box: null},
-      {name: 'green',  el: document.querySelector('[gltf-model="#navmesh-green"]'),  box: null},
-      {name: 'indigo', el: document.querySelector('[gltf-model="#navmesh-indigo"]'), box: null},
-      {name: 'orange', el: document.querySelector('[gltf-model="#navmesh-orange"]'), box: null},
-      {name: 'red',    el: document.querySelector('[gltf-model="#navmesh-red"]'),    box: null},
-      {name: 'yellow', el: document.querySelector('[gltf-model="#navmesh-yellow"]'), box: null}
+      { name: 'blue',   el: document.querySelector('[gltf-model="#navmesh-blue"]'),   box: null },
+      { name: 'green',  el: document.querySelector('[gltf-model="#navmesh-green"]'),  box: null },
+      { name: 'indigo', el: document.querySelector('[gltf-model="#navmesh-indigo"]'), box: null },
+      { name: 'orange', el: document.querySelector('[gltf-model="#navmesh-orange"]'), box: null },
+      { name: 'red',    el: document.querySelector('[gltf-model="#navmesh-red"]'),    box: null },
+      { name: 'yellow', el: document.querySelector('[gltf-model="#navmesh-yellow"]'), box: null }
     ];
   },
 
@@ -802,17 +803,16 @@ this.palettes = {
     const rig = this.rig;
     if (!rig || !rig.object3D) return;
 
-    // rig world position
     rig.object3D.getWorldPosition(this._rigPos);
 
     let activeZone = null;
 
     for (const z of this.zones) {
       if (!z.el) continue;
+
       const mesh = z.el.getObject3D('mesh') || z.el.object3D;
       if (!mesh) continue;
 
-      // build bounding box once
       if (!z.box) {
         z.box = new THREE.Box3().setFromObject(mesh);
       }
@@ -823,26 +823,38 @@ this.palettes = {
       }
     }
 
-    // no change → nothing to do
     if (activeZone === this.currentZone) return;
 
-    // tell the whole scene which zone is active
-    const name = activeZone ? activeZone.name : null;
-    this.el.emit('goethe-zone-changed', { name });
+    /* =========================
+       ZONE CHANGED
+       ========================= */
+    const zoneName = activeZone ? activeZone.name : null;
+    this.el.emit('goethe-zone-changed', { name: zoneName });
 
-    // if we have a new active zone, push its palette into spatial-marker
     if (activeZone && this.palettes[activeZone.name]) {
-      const palette = this.palettes[activeZone.name];
-      const value = palette.join(',');
-      rig.setAttribute('spatial-marker', 'colors', value);
+      const palette = this.palettes[activeZone.name].slice();
+
+      /* 🔥 IMPORTANT FIXES 🔥 */
+
+      // 1. Update spatial-marker with REAL array
+      rig.setAttribute('spatial-marker', {
+        colors: palette
+      });
+
+      // 2. Notify listeners (drawingZones, UI, etc.)
+      rig.emit('spatial-marker-colors-changed', {
+        colors: palette,
+        zone: activeZone.name
+      });
+
       console.log('[goethe-zones] active zone:', activeZone.name);
     }
 
     this.currentZone = activeZone;
   }
 });
-
 </script>
+
 
 <!-- Flat-override component : sets opacity for written texts -->
 <script>
@@ -887,7 +899,6 @@ AFRAME.registerComponent('flat-override', {
   }
 });
 </script>
-
 
 <!-- Background Music Manager -->
 <script>
@@ -1676,7 +1687,7 @@ raycaster="objects: .clickable">
   <a-entity class="laser-beam"
             laser-beam="length: 0.6; radius: 0.0025; useRaycasterFar: false;
                       idleColor: #ffffff; hoverColor: #00ff66; fadeSpeed: 18"
-            material="shader: flat; src: #line; color: #0d00ff; transparent: true; opacity: 0.95">
+            material="shader: flat; src: #line; color: #0d00ff; transparent: true; opacity: 0.95; depthWrite: false">
   </a-entity>
 
 </a-entity>
@@ -1689,7 +1700,7 @@ raycaster="objects: .clickable">
   <a-entity class="laser-beam"
             laser-beam="length: 0.6; radius: 0.0025; useRaycasterFar: false;
                       idleColor: #ffffff; hoverColor: #00ff66; fadeSpeed: 18"
-            material="shader: flat; src: #line; color: #0d00ff; transparent: true; opacity: 0.95">
+            material="shader: flat; src: #line; color: #0d00ff; transparent: true; opacity: 0.95; depthWrite: false">
   </a-entity>
 
 </a-entity>
