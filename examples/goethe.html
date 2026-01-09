@@ -723,61 +723,31 @@ AFRAME.registerComponent('shimmer-material', {
 
 <!-- Goethe Zones script (with laser enable/disable event) + laser-zone-disable component -->
 <script>
-/* =========================================================
-   1) HAND LASER ENABLE/DISABLE (listens to scene event)
-   ========================================================= */
-AFRAME.registerComponent('laser-zone-disable', {
-  schema: {
-    beams: { type: 'string', default: '.beam' } // beam entities inside the hand
-  },
-
-  init() {
-    this.sceneEl = this.el.sceneEl;
-    this._enabled = true;
-
-    this._onLaserToggle = (e) => {
-      const enabled = !!(e.detail && e.detail.enabled);
-      if (enabled === this._enabled) return;
-      this._enabled = enabled;
-      this._apply();
-    };
-
-    this.sceneEl.addEventListener('laser-enabled-changed', this._onLaserToggle);
-
-    // Apply once after children exist
-    setTimeout(() => this._apply(), 0);
-  },
-
-  remove() {
-    if (this.sceneEl) {
-      this.sceneEl.removeEventListener('laser-enabled-changed', this._onLaserToggle);
-    }
-  },
-
-  _apply() {
-    // 1) disable interactions
-    this.el.setAttribute('raycaster', 'enabled', this._enabled);
-    this.el.setAttribute('cursor', 'enabled', this._enabled);
-
-    // 2) hide/show beams
-    const beams = this.el.querySelectorAll(this.data.beams);
-    beams.forEach(b => b.setAttribute('visible', this._enabled));
-  }
-});
-
-
-/* =========================================================
-   2) GOETHE ZONES (emits palette + emits laser enable/disable)
-   ========================================================= */
 AFRAME.registerComponent('goethe-zones', {
   schema: {
-    rig: { type: 'selector', default: '#rig' }
+    rig: { type: 'selector', default: '#rig' },
+
+    // If true, leaving all zones restores whatever palette was on spatial-marker at init.
+    // If false (default), leaving zones keeps the last zone palette (no overwrite).
+    restoreOnExit: { type: 'boolean', default: false }
   },
 
   init: function () {
     this.rig = this.data.rig || document.querySelector('#rig');
-    this.currentZone = null;
+    this.currentZoneName = null;
     this._rigPos = new THREE.Vector3();
+
+    // Capture initial palette (optional restore)
+    this._defaultPalette = null;
+    try {
+      const sm = this.rig && this.rig.getAttribute('spatial-marker');
+      if (sm && sm.colors) {
+        if (Array.isArray(sm.colors)) this._defaultPalette = sm.colors.slice();
+        else if (typeof sm.colors === 'string') {
+          this._defaultPalette = sm.colors.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
+    } catch (_) {}
 
     /* =========================
        PALETTES (24 colors each)
@@ -834,78 +804,106 @@ AFRAME.registerComponent('goethe-zones', {
     };
 
     /* =========================
-       ZONES (navmeshes)
+       ZONES (use your actual zone entities by id)
        ========================= */
+    const byId = (id) => document.getElementById(id);
+
     this.zones = [
-      { name: 'blue',   el: document.querySelector('[gltf-model="#navmesh-blue"]'),   box: null },
-      { name: 'green',  el: document.querySelector('[gltf-model="#navmesh-green"]'),  box: null },
-      { name: 'indigo', el: document.querySelector('[gltf-model="#navmesh-indigo"]'), box: null },
-      { name: 'orange', el: document.querySelector('[gltf-model="#navmesh-orange"]'), box: null },
-      { name: 'red',    el: document.querySelector('[gltf-model="#navmesh-red"]'),    box: null },
-      { name: 'yellow', el: document.querySelector('[gltf-model="#navmesh-yellow"]'), box: null }
+      { name: 'orange', el: byId('navmesh-orange-element'), box: null, ready: false },
+      { name: 'blue',   el: byId('navmesh-blue-element'),   box: null, ready: false },
+      { name: 'red',    el: byId('navmesh-red-element'),    box: null, ready: false },
+      { name: 'yellow', el: byId('navmesh-yellow-element'), box: null, ready: false },
+      { name: 'green',  el: byId('navmesh-green-element'),  box: null, ready: false },
+      { name: 'indigo', el: byId('navmesh-indigo-element'), box: null, ready: false }
     ];
 
-    // ✅ ensures lasers are enabled at start (until we detect a zone)
-    this.el.emit('laser-enabled-changed', { enabled: true });
+    // Compute boxes only when each navmesh GLB is loaded
+    this._computeBoxForZone = (z) => {
+      if (!z || !z.el) return;
+      const obj = z.el.getObject3D('mesh') || z.el.object3D;
+      if (!obj) return;
+
+      // make sure world matrices are correct
+      obj.updateMatrixWorld(true);
+
+      z.box = new THREE.Box3().setFromObject(obj);
+      z.ready = true;
+    };
+
+    this.zones.forEach((z) => {
+      if (!z.el) return;
+
+      // if already loaded, compute now
+      if (z.el.getObject3D('mesh')) this._computeBoxForZone(z);
+
+      // otherwise wait for load
+      z.el.addEventListener('model-loaded', () => this._computeBoxForZone(z));
+    });
+  },
+
+  _applyPalette: function (zoneName) {
+    if (!this.rig) return;
+
+    if (zoneName && this.palettes[zoneName]) {
+      const palette = this.palettes[zoneName].slice();
+
+      // ✅ This is your original “works well” logic
+      this.rig.setAttribute('spatial-marker', { colors: palette });
+      this.rig.emit('spatial-marker-colors-changed', {
+        colors: palette,
+        zone: zoneName
+      });
+
+      // console.log('[goethe-zones] palette applied:', zoneName);
+      return;
+    }
+
+    // Leaving zones: either restore default or do nothing (recommended: do nothing)
+    if (!zoneName && this.data.restoreOnExit && this._defaultPalette && this._defaultPalette.length) {
+      const palette = this._defaultPalette.slice();
+      this.rig.setAttribute('spatial-marker', { colors: palette });
+      this.rig.emit('spatial-marker-colors-changed', {
+        colors: palette,
+        zone: null
+      });
+      // console.log('[goethe-zones] restored default palette');
+    }
   },
 
   tick: function () {
-    const rig = this.rig;
-    if (!rig || !rig.object3D) return;
+    if (!this.rig || !this.rig.object3D) return;
 
-    rig.object3D.getWorldPosition(this._rigPos);
+    this.rig.object3D.getWorldPosition(this._rigPos);
 
-    let activeZone = null;
+    let zoneName = null;
 
+    // Find first zone containing the rig position
     for (const z of this.zones) {
-      if (!z.el) continue;
-
-      const mesh = z.el.getObject3D('mesh') || z.el.object3D;
-      if (!mesh) continue;
-
-      if (!z.box) {
-        z.box = new THREE.Box3().setFromObject(mesh);
-      }
-
+      if (!z || !z.ready || !z.box) continue;
       if (z.box.containsPoint(this._rigPos)) {
-        activeZone = z;
+        zoneName = z.name;
         break;
       }
     }
 
-    if (activeZone === this.currentZone) return;
+    // No change? do nothing.
+    if (zoneName === this.currentZoneName) return;
 
-    /* =========================
-       ZONE CHANGED
-       ========================= */
-    const zoneName = activeZone ? activeZone.name : null;
+    // Update + emit (laser and other listeners rely on this)
+    this.currentZoneName = zoneName;
 
-    // existing event you already use elsewhere
-    this.el.emit('goethe-zone-changed', { name: zoneName });
-
-    // ✅ NEW: lasers enabled only when NOT inside a zone
-    this.el.emit('laser-enabled-changed', { enabled: !zoneName });
-
-    // palette updates
-    if (activeZone && this.palettes[activeZone.name]) {
-      const palette = this.palettes[activeZone.name].slice();
-
-      // 1) Update spatial-marker with REAL array
-      rig.setAttribute('spatial-marker', { colors: palette });
-
-      // 2) Notify listeners (drawingZones, UI, etc.)
-      rig.emit('spatial-marker-colors-changed', {
-        colors: palette,
-        zone: activeZone.name
-      });
-
-      console.log('[goethe-zones] active zone:', activeZone.name);
+    // IMPORTANT: emit from the scene so anything can listen globally
+    const sceneEl = this.el.sceneEl || document.querySelector('a-scene');
+    if (sceneEl) {
+      sceneEl.emit('goethe-zone-changed', { name: zoneName });
     }
 
-    this.currentZone = activeZone;
+    // Apply palette ONLY on change (prevents overwriting)
+    this._applyPalette(zoneName);
   }
 });
 </script>
+
 
 
 <!-- Flat-override component : sets opacity for written texts -->
@@ -1872,10 +1870,10 @@ raycaster="objects: .clickable">
   </a-entity>
 </a-entity>
 
-
 </a-entity>
 
-</a-entity>
+<a-sphere id="debug-marker" radius="0.02" position="0 0 -2" material="color: #4596ff; shader: flat;  opacity: 0.5; side: double" visible="false"></a-sphere> 
+
 
  <!-- Sky -->
 <a-sky radius="200" theta-length="110" class="environment" material="shader: skyshader; blending: none; anisotropy: 1.04; turbidity: 20; mieCoefficient: 0.1; mieDirectionalG: 0.72; sunPosition: -0.10389385923870163 0.9444896294427422 0.31168157771610494"></a-sky>
@@ -2024,6 +2022,38 @@ position="5.44141 1.79871 2.94187" gradient-color="color1: #ffffff; color2: #f0f
 <a-entity id="vernunft" gltf-model="#vernunft" position="-1.32109 0.22329 -2.73259" flat-override="opacity: 0.7" rotation="-65.7698253030672 21.4790418238643 8.341692539309655"></a-entity>
 
 </a-scene>
+
+<script>
+  AFRAME.registerComponent('raycast-handler', {
+    init: function() {
+      var el = this.el;
+      var marker = document.querySelector('#debug-marker');
+
+      el.addEventListener('raycaster-intersection', function(evt) {
+        var intersection = evt.detail.intersections[0];
+        marker.setAttribute('position', intersection.point);
+        marker.setAttribute('visible', true);
+      });
+
+      el.addEventListener('raycaster-intersection-cleared', function(evt) {
+        marker.setAttribute('visible', false);
+      });
+    },
+
+    tick: function() {
+      var intersections = this.el.components.raycaster.intersections;
+      var marker = document.querySelector('#debug-marker');
+      if (intersections.length > 0) {
+        var intersectionPoint = intersections[0].point;
+        marker.setAttribute('position', intersectionPoint);
+      }
+    }
+  });
+
+  document.querySelector('#right-hand').setAttribute('raycast-handler', '');
+</script>
+              
+
 
   </body>
 </html>
