@@ -720,38 +720,23 @@ AFRAME.registerComponent('shimmer-material', {
 });
 </script>
 
-
 <!-- Goethe Zones script (with laser enable/disable event) + laser-zone-disable component -->
 <script>
 AFRAME.registerComponent('goethe-zones', {
   schema: {
     rig: { type: 'selector', default: '#rig' },
 
-    // If true, leaving all zones restores whatever palette was on spatial-marker at init.
-    // If false (default), leaving zones keeps the last zone palette (no overwrite).
-    restoreOnExit: { type: 'boolean', default: false }
+    // If true, leaving all zones does NOT reset to default palette.
+    keepLastPaletteOutside: { type: 'boolean', default: true }
   },
 
   init: function () {
     this.rig = this.data.rig || document.querySelector('#rig');
-    this.currentZoneName = null;
+
+    this.currentZoneKey = null;   // 'orange' | 'blue' | ...
     this._rigPos = new THREE.Vector3();
 
-    // Capture initial palette (optional restore)
-    this._defaultPalette = null;
-    try {
-      const sm = this.rig && this.rig.getAttribute('spatial-marker');
-      if (sm && sm.colors) {
-        if (Array.isArray(sm.colors)) this._defaultPalette = sm.colors.slice();
-        else if (typeof sm.colors === 'string') {
-          this._defaultPalette = sm.colors.split(',').map(s => s.trim()).filter(Boolean);
-        }
-      }
-    } catch (_) {}
-
-    /* =========================
-       PALETTES (24 colors each)
-       ========================= */
+    // --- palettes (your exact values) ---
     this.palettes = {
       blue: [
         '#081427','#3572ee','#0b1a33','#3a7aff',
@@ -803,107 +788,138 @@ AFRAME.registerComponent('goethe-zones', {
       ]
     };
 
-    /* =========================
-       ZONES (use your actual zone entities by id)
-       ========================= */
-    const byId = (id) => document.getElementById(id);
-
+    // --- zone entities (use YOUR ids, map to palette keys explicitly) ---
     this.zones = [
-      { name: 'orange', el: byId('navmesh-orange-element'), box: null, ready: false },
-      { name: 'blue',   el: byId('navmesh-blue-element'),   box: null, ready: false },
-      { name: 'red',    el: byId('navmesh-red-element'),    box: null, ready: false },
-      { name: 'yellow', el: byId('navmesh-yellow-element'), box: null, ready: false },
-      { name: 'green',  el: byId('navmesh-green-element'),  box: null, ready: false },
-      { name: 'indigo', el: byId('navmesh-indigo-element'), box: null, ready: false }
+      { key: 'orange', el: document.querySelector('#navmesh-orange-element'), box: new THREE.Box3() },
+      { key: 'blue',   el: document.querySelector('#navmesh-blue-element'),   box: new THREE.Box3() },
+      { key: 'red',    el: document.querySelector('#navmesh-red-element'),    box: new THREE.Box3() },
+      { key: 'yellow', el: document.querySelector('#navmesh-yellow-element'), box: new THREE.Box3() },
+      { key: 'green',  el: document.querySelector('#navmesh-green-element'),  box: new THREE.Box3() },
+      { key: 'indigo', el: document.querySelector('#navmesh-indigo-element'), box: new THREE.Box3() }
     ];
 
-    // Compute boxes only when each navmesh GLB is loaded
-    this._computeBoxForZone = (z) => {
-      if (!z || !z.el) return;
-      const obj = z.el.getObject3D('mesh') || z.el.object3D;
-      if (!obj) return;
+    // --- spatial-marker readiness ---
+    this._spatialReady = false;
+    this._pendingZoneKey = null;
 
-      // make sure world matrices are correct
-      obj.updateMatrixWorld(true);
-
-      z.box = new THREE.Box3().setFromObject(obj);
-      z.ready = true;
+    this._checkSpatialReady = () => {
+      const r = this.rig;
+      if (!r) return false;
+      const sm = r.components && r.components['spatial-marker'];
+      if (sm) {
+        this._spatialReady = true;
+        return true;
+      }
+      return false;
     };
 
-    this.zones.forEach((z) => {
-      if (!z.el) return;
+    // When any component initializes on rig, see if it's spatial-marker
+    this._onCompInit = (e) => {
+      if (!e || e.detail?.name !== 'spatial-marker') return;
+      this._spatialReady = true;
 
-      // if already loaded, compute now
-      if (z.el.getObject3D('mesh')) this._computeBoxForZone(z);
+      // If we queued a zone while SM wasn't ready, apply now
+      if (this._pendingZoneKey) {
+        this._applyPalette(this._pendingZoneKey);
+        this._pendingZoneKey = null;
+      }
+    };
 
-      // otherwise wait for load
-      z.el.addEventListener('model-loaded', () => this._computeBoxForZone(z));
-    });
+    if (this.rig) {
+      this.rig.addEventListener('componentinitialized', this._onCompInit);
+      // Also try immediately (in case it's already ready)
+      this._checkSpatialReady();
+    }
   },
 
-  _applyPalette: function (zoneName) {
-    if (!this.rig) return;
-
-    if (zoneName && this.palettes[zoneName]) {
-      const palette = this.palettes[zoneName].slice();
-
-      // ✅ This is your original “works well” logic
-      this.rig.setAttribute('spatial-marker', { colors: palette });
-      this.rig.emit('spatial-marker-colors-changed', {
-        colors: palette,
-        zone: zoneName
-      });
-
-      // console.log('[goethe-zones] palette applied:', zoneName);
-      return;
-    }
-
-    // Leaving zones: either restore default or do nothing (recommended: do nothing)
-    if (!zoneName && this.data.restoreOnExit && this._defaultPalette && this._defaultPalette.length) {
-      const palette = this._defaultPalette.slice();
-      this.rig.setAttribute('spatial-marker', { colors: palette });
-      this.rig.emit('spatial-marker-colors-changed', {
-        colors: palette,
-        zone: null
-      });
-      // console.log('[goethe-zones] restored default palette');
+  remove: function () {
+    if (this.rig && this._onCompInit) {
+      this.rig.removeEventListener('componentinitialized', this._onCompInit);
     }
   },
 
   tick: function () {
     if (!this.rig || !this.rig.object3D) return;
 
+    // Always refresh readiness (covers edge cases / reloads)
+    if (!this._spatialReady) this._checkSpatialReady();
+
     this.rig.object3D.getWorldPosition(this._rigPos);
 
-    let zoneName = null;
+    let activeKey = null;
 
-    // Find first zone containing the rig position
     for (const z of this.zones) {
-      if (!z || !z.ready || !z.box) continue;
+      if (!z.el) continue;
+
+      // mesh can be on 'mesh' object3D, but fallback is fine
+      const obj = z.el.getObject3D('mesh') || z.el.object3D;
+      if (!obj) continue;
+
+      // Recompute box (cheap enough for 6 zones, avoids stale bounds)
+      z.box.setFromObject(obj);
+
       if (z.box.containsPoint(this._rigPos)) {
-        zoneName = z.name;
+        activeKey = z.key;
         break;
       }
     }
 
-    // No change? do nothing.
-    if (zoneName === this.currentZoneName) return;
+    if (activeKey === this.currentZoneKey) return;
 
-    // Update + emit (laser and other listeners rely on this)
-    this.currentZoneName = zoneName;
+    // Zone changed event (scene-level is easiest for listeners)
+    const sceneEl = this.el.sceneEl || this.el; // works even if attached to <a-scene>
+    sceneEl.emit('goethe-zone-changed', { name: activeKey });
 
-    // IMPORTANT: emit from the scene so anything can listen globally
-    const sceneEl = this.el.sceneEl || document.querySelector('a-scene');
-    if (sceneEl) {
-      sceneEl.emit('goethe-zone-changed', { name: zoneName });
+    // Apply palette (or keep last palette when outside)
+    if (activeKey) {
+      if (this._spatialReady) this._applyPalette(activeKey);
+      else this._pendingZoneKey = activeKey;
+    } else {
+      if (!this.data.keepLastPaletteOutside) {
+        // Optional: reset to default if you want.
+        // If you want a custom "default" palette, set it here.
+      }
     }
 
-    // Apply palette ONLY on change (prevents overwriting)
-    this._applyPalette(zoneName);
+    this.currentZoneKey = activeKey;
+  },
+
+  _applyPalette: function (zoneKey) {
+    const palette = this.palettes[zoneKey];
+    if (!palette || !palette.length) return;
+
+    const rig = this.rig;
+    if (!rig) return;
+
+    const colors = palette.slice(); // clone
+
+    // ✅ Most reliable: emit the event your system listens to
+    rig.emit('spatial-marker-colors-changed', {
+      colors,
+      zone: zoneKey
+    });
+
+    // ✅ Also set the component attribute (covers reload / fresh init cases)
+    // Try both styles to be robust across schema changes:
+    try {
+      rig.setAttribute('spatial-marker', { colors });
+    } catch (_) {}
+
+    try {
+      // If schema parses strings, this helps too:
+      rig.setAttribute('spatial-marker', 'colors', colors);
+    } catch (_) {}
+
+    // "Win" against late init that might overwrite defaults:
+    requestAnimationFrame(() => {
+      try { rig.setAttribute('spatial-marker', { colors }); } catch (_) {}
+      rig.emit('spatial-marker-colors-changed', { colors, zone: zoneKey });
+    });
+
+    console.log('[goethe-zones] active zone:', zoneKey);
   }
 });
 </script>
-
 
 
 <!-- Flat-override component : sets opacity for written texts -->
@@ -1872,7 +1888,7 @@ raycaster="objects: .clickable">
 
 </a-entity>
 
-<a-sphere id="debug-marker" radius="0.02" position="0 0 -2" material="color: #4596ff; shader: flat;  opacity: 0.5; side: double" visible="false"></a-sphere> 
+<a-sphere id="debug-marker" radius="0.01" position="0 0 -2" material="color: #ffffff; shader: flat;  opacity: 1; side: double" visible="false"></a-sphere> 
 
 
  <!-- Sky -->
