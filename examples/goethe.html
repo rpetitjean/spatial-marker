@@ -855,7 +855,6 @@ AFRAME.registerComponent('goethe-zones', {
 });
 </script>
 
-
 <!-- Flat-override component : sets opacity for written texts -->
 <script>
 AFRAME.registerComponent('flat-override', {
@@ -1012,12 +1011,12 @@ AFRAME.registerComponent('laser-beam', {
   schema: {
     length: { type: 'number', default: 0.6 },
     radius: { type: 'number', default: 0.0025 },
-    useRaycasterFar: { type: 'boolean', default: false },
 
-    // NEW: color fade
+    mode: { type: 'string', default: 'occluded' }, // 'occluded' | 'xray'
+
     idleColor:  { type: 'color', default: '#ffffff' },
     hoverColor: { type: 'color', default: '#00ff66' },
-    fadeSpeed:  { type: 'number', default: 18 } // per second, higher = faster
+    fadeSpeed:  { type: 'number', default: 22 }
   },
 
   init() {
@@ -1036,7 +1035,7 @@ AFRAME.registerComponent('laser-beam', {
     this._origin = new THREE.Vector3();
     this._q = new THREE.Quaternion();
 
-    // Color state
+    // Color fade state
     this._idle = new THREE.Color(this.data.idleColor);
     this._hover = new THREE.Color(this.data.hoverColor);
     this._current = this._idle.clone();
@@ -1044,8 +1043,8 @@ AFRAME.registerComponent('laser-beam', {
 
     this._isHovering = false;
 
-    // Listen to parent raycaster intersections
-    const parent = this.el.parentEl;
+    // Intersections come from the HAND's raycaster (parent)
+    const hand = this.el.parentEl;
     this._onHit = (e) => {
       const els = (e.detail && e.detail.els) || [];
       this._isHovering = !!els[0];
@@ -1056,47 +1055,67 @@ AFRAME.registerComponent('laser-beam', {
       this._target.copy(this._idle);
     };
 
-    parent.addEventListener('raycaster-intersection', this._onHit);
-    parent.addEventListener('raycaster-intersection-cleared', this._onClear);
+    hand.addEventListener('raycaster-intersection', this._onHit);
+    hand.addEventListener('raycaster-intersection-cleared', this._onClear);
 
-    // ensure initial color
-    this.el.setAttribute('material', 'color', `#${this._current.getHexString()}`);
+    this._materialTweaked = false;
   },
 
   remove() {
-    const parent = this.el.parentEl;
-    if (parent) {
-      parent.removeEventListener('raycaster-intersection', this._onHit);
-      parent.removeEventListener('raycaster-intersection-cleared', this._onClear);
+    const hand = this.el.parentEl;
+    if (hand) {
+      hand.removeEventListener('raycaster-intersection', this._onHit);
+      hand.removeEventListener('raycaster-intersection-cleared', this._onClear);
     }
   },
 
-  update(oldData) {
-    // keep colors in sync if changed via attributes
-    this._idle.set(this.data.idleColor);
-    this._hover.set(this.data.hoverColor);
-    if (!this._isHovering) this._target.copy(this._idle);
-    else this._target.copy(this._hover);
+  _tweakMaterialOnce() {
+    if (this._materialTweaked) return;
+
+    const mesh = this.el.getObject3D('mesh');
+    if (!mesh) return;
+
+    // Draw beams late, without touching global renderer sorting.
+    mesh.renderOrder = (this.data.mode === 'xray') ? 10001 : 10000;
+
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    mats.forEach((m) => {
+      if (!m) return;
+
+      // Both beams: don't mess the depth buffer
+      m.depthWrite = false;
+      m.transparent = true;
+
+      if (this.data.mode === 'xray') {
+        // Always visible (won’t disappear on transparent/glass)
+        m.depthTest = false;
+      } else {
+        // Occluded by solid geometry
+        m.depthTest = true;
+      }
+
+      m.needsUpdate = true;
+    });
+
+    this._materialTweaked = true;
   },
 
   tick(time, dt) {
-    const parent = this.el.parentEl;
-    const rc = parent && parent.components && parent.components.raycaster;
+    const hand = this.el.parentEl;
+    const rc = hand && hand.components && hand.components.raycaster;
     if (!rc) return;
 
-    const d = rc.data;
+    this._tweakMaterialOnce();
 
-    // ----- alignment (exactly matches raycaster line) -----
+    // ----- align cylinder to raycaster origin+direction -----
+    const d = rc.data;
     this._dir.set(d.direction.x, d.direction.y, d.direction.z);
     if (this._dir.lengthSq() < 1e-8) return;
     this._dir.normalize();
 
     this._origin.set(d.origin.x, d.origin.y, d.origin.z);
 
-    const len = this.data.useRaycasterFar
-      ? (Number.isFinite(d.far) ? d.far : 1000)
-      : this.data.length;
-
+    const len = this.data.length;
     this.el.object3D.position.copy(this._origin).addScaledVector(this._dir, len * 0.5);
     this._q.setFromUnitVectors(this._up, this._dir);
     this.el.object3D.quaternion.copy(this._q);
@@ -1104,14 +1123,13 @@ AFRAME.registerComponent('laser-beam', {
 
     // ----- fast color fade -----
     const dtSec = dt / 1000;
-    const k = 1 - Math.exp(-this.data.fadeSpeed * dtSec); // smooth + framerate-independent
+    const k = 1 - Math.exp(-this.data.fadeSpeed * dtSec);
     this._current.lerp(this._target, k);
-
-    // Apply to material (A-Frame material component)
     this.el.setAttribute('material', 'color', `#${this._current.getHexString()}`);
   }
 });
 </script>
+
 
   </head>
 
@@ -1584,7 +1602,7 @@ window.addEventListener('DOMContentLoaded', () => {
     <a-scene 
     light="defaultLightsEnabled: false" 
     background="color: #ffffff" 
-    renderer="colorManagement: true; physicallyCorrectLights: true" 
+    renderer="colorManagement: linear; physicallyCorrectLights: true; sortTransparentObjects: true; "
     goethe-zones
     bgm-manager="src: assets/goethe-colors/FranzLiszt_Berceuse_D_FlatMajor_174_ScoreToMIDI_CC0_compressed.mp3;
                volume: 0.75;
@@ -1680,28 +1698,43 @@ cursor="rayOrigin: mouse"
 raycaster="objects: .clickable">
 <a-box camera="far: 700; fov: 55; near: 0.1; active: true" position="0 1.7 0" visible="false" ></a-box>
 <a-entity id="left-hand"
-          laser-controls="hand: left"
-          raycaster="objects: .clickable; far: 6; showLine: false"  line="opacity: 0; visible: false"
-          cursor="rayOrigin: entity; fuse: false">
+  laser-controls="hand: left"
+  raycaster="objects: .clickable; far: 6; showLine: false"
+  cursor="rayOrigin: entity; fuse: false"
+  line="opacity: 0; visible: false">
 
-  <a-entity class="laser-beam"
-            laser-beam="length: 0.6; radius: 0.0025; useRaycasterFar: false;
-                      idleColor: #ffffff; hoverColor: #00ff66; fadeSpeed: 18"
-            material="shader: flat; src: #line; color: #0d00ff; transparent: true; opacity: 0.95; depthWrite: false">
+  <!-- Beam that is occluded normally -->
+  <a-entity class="beam beam-occluded"
+    laser-beam="length: 0.6; radius: 0.0025; mode: occluded; idleColor: #ffffff; hoverColor: #00ff66; fadeSpeed: 22"
+    material="shader: flat; src: #line; transparent: true; opacity: 0.95">
   </a-entity>
 
+  <!-- Beam that never disappears (faint) -->
+  <a-entity class="beam beam-xray"
+    laser-beam="length: 0.6; radius: 0.0025; mode: xray; idleColor: #ffffff; hoverColor: #00ff66; fadeSpeed: 22"
+    material="shader: flat; src: #line; transparent: true; opacity: 0.18">
+  </a-entity>
 </a-entity>
 
 <a-entity id="right-hand"
-          laser-controls="hand: right"
-          raycaster="objects: .clickable; far: 6; showLine: false"  line="opacity: 0; visible: false"
-          cursor="rayOrigin: entity; fuse: false">
+  laser-controls="hand: right"
+  raycaster="objects: .clickable; far: 6; showLine: false"
+  cursor="rayOrigin: entity; fuse: false"
+  line="opacity: 0; visible: false">
 
-  <a-entity class="laser-beam"
-            laser-beam="length: 0.6; radius: 0.0025; useRaycasterFar: false;
-                      idleColor: #ffffff; hoverColor: #00ff66; fadeSpeed: 18"
-            material="shader: flat; src: #line; color: #0d00ff; transparent: true; opacity: 0.95; depthWrite: false">
+  <!-- Beam that is occluded normally -->
+  <a-entity class="beam beam-occluded"
+    laser-beam="length: 0.6; radius: 0.0025; mode: occluded; idleColor: #ffffff; hoverColor: #00ff66; fadeSpeed: 22"
+    material="shader: flat; src: #line; transparent: true; opacity: 0.95">
   </a-entity>
+
+  <!-- Beam that never disappears (faint) -->
+  <a-entity class="beam beam-xray"
+    laser-beam="length: 0.6; radius: 0.0025; mode: xray; idleColor: #ffffff; hoverColor: #00ff66; fadeSpeed: 22"
+    material="shader: flat; src: #line; transparent: true; opacity: 0.18">
+  </a-entity>
+</a-entity>
+
 
 </a-entity>
 
@@ -1729,14 +1762,12 @@ scale="1.2 1.2 1.2">
 
 <!-- Diagram plane → diagram text -->
  <a-entity id="diagram-element" material="transparent: true; src: #diagram" geometry="primitive: plane" rotation="-90.00021045914971 62.589336582296 0" position="-0.03296 0.81439 0" shimmer-material="shimmerIntensity: 1.5" class="clickable" fade-on-event="targets: #diagram-text; duration: 3; hold: 5; group: goetheTexts"></a-entity>
-<a-entity id="diagram-big" material="transparent: true; src: #diagram" geometry="primitive: plane" rotation="-90.00021045914971 62.589336582296 0" position="-0.03296 0.01241 0" shimmer-material="shimmerIntensity: 1.5" class="clickable" scale="9 9 9">
+<a-entity id="diagram-big" material="opacity: 0.6; transparent: true; src: #diagram" geometry="primitive: plane" rotation="-90.00021045914971 62.589336582296 0" position="-0.03296 0.01241 0" class="clickable" scale="9 9 9">
 </a-entity>
 
 
 <a-entity id="element-Goethe" gltf-model="assets/goethe-colors/goethe-written.glb" position="0.38916 1.39795 0" flat-override="opacity: 0.2" fade-on-event="targets: #goethe-text; duration: 3; hold: 5; group: goetheTexts" class="clickable" scale="0.3 0.3 0.3" rotation="0 -90 0"></a-entity>
-
 <a-entity id="element-theory" gltf-model="assets/goethe-colors/theoryofcolors.glb" position="0.43605 1.18089 0" flat-override="opacity: 0.2" fade-on-event="targets: #diagram-text; duration: 3; hold: 5; group: goetheTexts" class="clickable" scale="0.3 0.3 0.3" rotation="0 -90 0"></a-entity>
-
 <a-entity id="element-diagram" gltf-model="assets/goethe-colors/colordiagram.glb" position="0.45782 0.99437 0" flat-override="opacity: 0.2" fade-on-event="targets: #theory-text; duration: 3; hold: 5; group: goetheTexts" class="clickable" scale="0.3 0.3 0.3" rotation="0 -90 0"></a-entity>
 <a-entity gltf-model="#table" rotation="0 -90 0" position="0 0 0" visible="true"></a-entity>
 
