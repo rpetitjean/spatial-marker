@@ -1076,18 +1076,40 @@ AFRAME.registerComponent('bgm-manager', {
 <script>
 AFRAME.registerComponent('laser-beam', {
   schema: {
+    // beam shape
     length: { type: 'number', default: 0.6 },
     radius: { type: 'number', default: 0.0025 },
 
+    // rendering mode
     mode: { type: 'string', default: 'occluded' }, // 'occluded' | 'xray'
 
+    // hover fade
     idleColor:  { type: 'color', default: '#ffffff' },
     hoverColor: { type: 'color', default: '#00ff66' },
     fadeSpeed:  { type: 'number', default: 22 },
 
-    // NEW: keep laser-controls/raycaster helper line permanently hidden
-    hideControllerLine: { type: 'boolean', default: true },
-    hideEveryMs:        { type: 'int', default: 250 } // periodic enforcement
+    /* =========================
+       ZONE DISABLE (NEW)
+       ========================= */
+    disableInZones: { type: 'boolean', default: true },
+
+    // which elements are "laser-off volumes"
+    zoneSelector: { type: 'string', default: '.laser-zone' },
+
+    // who we test position from
+    rig: { type: 'selector', default: '#rig' },
+
+    // how often to recompute boxes (ms)
+    boxesUpdateMs: { type: 'number', default: 1000 },
+
+    // expand zone boxes slightly (meters)
+    boxPadding: { type: 'number', default: 0.08 },
+
+    // also disable the hand raycaster/cursor while inside zones
+    disableHandRaycaster: { type: 'boolean', default: true },
+
+    // always keep native ray line invisible (Meta menu return fix)
+    enforceHideNativeLine: { type: 'boolean', default: true }
   },
 
   init() {
@@ -1110,21 +1132,17 @@ AFRAME.registerComponent('laser-beam', {
     this._idle = new THREE.Color(this.data.idleColor);
     this._hover = new THREE.Color(this.data.hoverColor);
     this._current = this._idle.clone();
-    this._target  = this._idle.clone();
-
-    this._isHovering = false;
-
-    // Parent "hand" entity (where laser-controls + raycaster live)
-    this.hand = this.el.parentEl;
+    this._target = this._idle.clone();
 
     // Intersections come from the HAND's raycaster (parent)
+    this.hand = this.el.parentEl;
+
     this._onHit = (e) => {
       const els = (e.detail && e.detail.els) || [];
-      this._isHovering = !!els[0];
-      this._target.copy(this._isHovering ? this._hover : this._idle);
+      const hovering = !!els[0];
+      this._target.copy(hovering ? this._hover : this._idle);
     };
     this._onClear = () => {
-      this._isHovering = false;
       this._target.copy(this._idle);
     };
 
@@ -1133,81 +1151,128 @@ AFRAME.registerComponent('laser-beam', {
       this.hand.addEventListener('raycaster-intersection-cleared', this._onClear);
     }
 
-    // Controller line hiding (Meta menu resume fix)
     this._materialTweaked = false;
-    this._hideAcc = 0;
 
-    this._hideControllerLineNow = this._hideControllerLineNow.bind(this);
-    this._hideSoon = () => setTimeout(this._hideControllerLineNow, 50);
-
-    if (this.data.hideControllerLine) {
-      // Apply quickly at start + after XR lifecycle / reconnects
-      this._hideSoon();
-
-      const scene = this.el.sceneEl;
-      if (scene) {
-        scene.addEventListener('enter-vr', this._hideSoon);
-        scene.addEventListener('exit-vr',  this._hideSoon);
+    /* =========================
+       ZONE MANAGER (one per hand)
+       ========================= */
+    this._isManager = false;
+    if (this.hand && this.data.disableInZones) {
+      if (!this.hand.__laserBeamZoneMgr) {
+        this._isManager = true;
+        this.hand.__laserBeamZoneMgr = this._createZoneManager();
       }
-
-      if (this.hand) {
-        this.hand.addEventListener('controllerconnected', this._hideSoon);
-        this.hand.addEventListener('controllermodelready', this._hideSoon);
-      }
-
-      // Meta button often triggers visibilitychange (pause/resume)
-      this._onVisibility = () => {
-        if (!document.hidden) this._hideSoon();
-      };
-      document.addEventListener('visibilitychange', this._onVisibility, false);
     }
   },
 
   remove() {
-    const hand = this.hand;
-    if (hand) {
-      hand.removeEventListener('raycaster-intersection', this._onHit);
-      hand.removeEventListener('raycaster-intersection-cleared', this._onClear);
-      hand.removeEventListener('controllerconnected', this._hideSoon);
-      hand.removeEventListener('controllermodelready', this._hideSoon);
-    }
-
-    const scene = this.el.sceneEl;
-    if (scene) {
-      scene.removeEventListener('enter-vr', this._hideSoon);
-      scene.removeEventListener('exit-vr',  this._hideSoon);
-    }
-
-    if (this._onVisibility) {
-      document.removeEventListener('visibilitychange', this._onVisibility, false);
+    if (this.hand) {
+      this.hand.removeEventListener('raycaster-intersection', this._onHit);
+      this.hand.removeEventListener('raycaster-intersection-cleared', this._onClear);
     }
   },
 
-  _hideControllerLineNow() {
-    if (!this.data.hideControllerLine) return;
-    const hand = this.hand;
-    if (!hand) return;
+  _createZoneManager() {
+    const comp = this;
 
-    // Keep raycaster helper disabled
-    hand.setAttribute('raycaster', 'showLine', false);
+    const mgr = {
+      disabled: false,
+      lastBoxesUpdate: -Infinity,
+      zones: [],   // { el, box }
+      rigEl: comp.data.rig || document.querySelector('#rig'),
+      rigPos: new THREE.Vector3(),
 
-    // Keep A-Frame line component hidden (laser-controls uses it)
-    hand.setAttribute('line', { visible: false, opacity: 0 });
+      rebuildZones() {
+        const sceneEl = comp.el.sceneEl;
+        const sel = String(comp.data.zoneSelector || '').trim();
+        this.zones = [];
 
-    // Hide any line object3D created by components
-    const lineObj = hand.getObject3D('line');
-    if (lineObj) lineObj.visible = false;
+        if (!sceneEl || !sel) return;
 
-    // Some versions store raycaster line directly
-    const rc = hand.components && hand.components.raycaster;
-    if (rc && rc.line) rc.line.visible = false;
+        const els = Array.from(sceneEl.querySelectorAll(sel));
+        this.zones = els.map(el => ({ el, box: null }));
 
-    // Nuclear: hide ANY THREE.Line on the controller graph
-    hand.object3D.traverse((o) => {
-      if (o && (o.isLine || o.type === 'Line' || o.type === 'LineSegments')) {
-        o.visible = false;
+        // when GLBs load, force box recompute
+        this.zones.forEach(z => {
+          const invalidate = () => { z.box = null; };
+          z._invalidate = invalidate;
+          z.el.addEventListener('model-loaded', invalidate);
+          z.el.addEventListener('object3dset', invalidate);
+        });
+      },
+
+      computeBoxes(force=false) {
+        const now = performance.now();
+        if (!force && (now - this.lastBoxesUpdate) < comp.data.boxesUpdateMs) return;
+        this.lastBoxesUpdate = now;
+
+        const pad = Math.max(0, comp.data.boxPadding || 0);
+
+        for (const z of this.zones) {
+          if (z.box) continue;
+
+          const obj = z.el.getObject3D('mesh') || z.el.object3D;
+          if (!obj) continue;
+
+          const box = new THREE.Box3().setFromObject(obj);
+          if (pad) box.expandByScalar(pad);
+          z.box = box;
+        }
+      },
+
+      isRigInsideAnyZone() {
+        const rig = this.rigEl || (comp.data.rig || document.querySelector('#rig'));
+        if (!rig || !rig.object3D) return false;
+
+        rig.object3D.getWorldPosition(this.rigPos);
+
+        for (const z of this.zones) {
+          if (z.box && z.box.containsPoint(this.rigPos)) return true;
+        }
+        return false;
+      },
+
+      enforceHideNativeLine() {
+        if (!comp.data.enforceHideNativeLine) return;
+        if (!comp.hand) return;
+
+        // Keep the default laser-controls line invisible even after Meta menu / pause.
+        comp.hand.setAttribute('raycaster', 'showLine', false);
+        comp.hand.setAttribute('line', 'opacity: 0; visible: false');
+      },
+
+      applyToHand(disable) {
+        if (!comp.hand) return;
+
+        if (comp.data.disableHandRaycaster) {
+          comp.hand.setAttribute('raycaster', 'enabled', !disable);
+          comp.hand.setAttribute('cursor', 'enabled', !disable);
+        }
+
+        // Also force-hide native line regardless
+        this.enforceHideNativeLine();
+      },
+
+      tick() {
+        // If zones appear later, rebuild occasionally (cheap)
+        if (!this.zones.length) this.rebuildZones();
+
+        this.enforceHideNativeLine();
+        this.computeBoxes(false);
+
+        const inside = this.isRigInsideAnyZone();
+        if (inside !== this.disabled) {
+          this.disabled = inside;
+          this.applyToHand(this.disabled);
+        }
       }
-    });
+    };
+
+    mgr.rebuildZones();
+    mgr.computeBoxes(true);
+    mgr.applyToHand(false);
+
+    return mgr;
   },
 
   _tweakMaterialOnce() {
@@ -1216,24 +1281,18 @@ AFRAME.registerComponent('laser-beam', {
     const mesh = this.el.getObject3D('mesh');
     if (!mesh) return;
 
-    // Draw beams late, without touching global renderer sorting.
+    // Draw beams late.
     mesh.renderOrder = (this.data.mode === 'xray') ? 10001 : 10000;
 
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     mats.forEach((m) => {
       if (!m) return;
 
-      // Both beams: don't mess the depth buffer
       m.depthWrite = false;
       m.transparent = true;
 
-      if (this.data.mode === 'xray') {
-        // Always visible (won’t disappear on transparent/glass)
-        m.depthTest = false;
-      } else {
-        // Occluded by solid geometry
-        m.depthTest = true;
-      }
+      if (this.data.mode === 'xray') m.depthTest = false;
+      else m.depthTest = true;
 
       m.needsUpdate = true;
     });
@@ -1242,24 +1301,26 @@ AFRAME.registerComponent('laser-beam', {
   },
 
   tick(time, dt) {
+    // zone manager runs once per hand
+    const mgr = this.hand && this.hand.__laserBeamZoneMgr;
+    if (this._isManager && mgr) mgr.tick();
+
+    // hide beams if inside any zone
+    if (mgr && mgr.disabled) {
+      if (this.el.object3D.visible) this.el.object3D.visible = false;
+      return;
+    } else {
+      if (!this.el.object3D.visible) this.el.object3D.visible = true;
+    }
+
+    // Align to raycaster
     const hand = this.hand;
     const rc = hand && hand.components && hand.components.raycaster;
     if (!rc) return;
 
-    // Periodically re-hide controller line (handles Meta menu resume)
-    if (this.data.hideControllerLine) {
-      this._hideAcc += dt;
-      if (this._hideAcc >= this.data.hideEveryMs) {
-        this._hideAcc = 0;
-        this._hideControllerLineNow();
-      }
-    }
-
     this._tweakMaterialOnce();
 
-    // ----- align cylinder to raycaster origin+direction -----
     const d = rc.data;
-
     this._dir.set(d.direction.x, d.direction.y, d.direction.z);
     if (this._dir.lengthSq() < 1e-8) return;
     this._dir.normalize();
@@ -1272,7 +1333,7 @@ AFRAME.registerComponent('laser-beam', {
     this.el.object3D.quaternion.copy(this._q);
     this.el.object3D.scale.set(this.data.radius, len, this.data.radius);
 
-    // ----- fast color fade -----
+    // Fast color fade
     const dtSec = dt / 1000;
     const k = 1 - Math.exp(-this.data.fadeSpeed * dtSec);
     this._current.lerp(this._target, k);
@@ -1280,6 +1341,8 @@ AFRAME.registerComponent('laser-beam', {
   }
 });
 </script>
+
+
 
   </head>
 
@@ -1929,7 +1992,7 @@ scale="1.2 1.2 1.2">
           gltf-model="#navmesh-orange"
           rotation="0 -90 0"
           position="0 0 0"
-          class="drawingArea navmesh"
+          class="drawingArea navmesh laser-zone"
           visible="false"
           area-fade-gradient="target: #element-orange-area; zone: orange; maxOpacity: 1; minOpacity: 0.04; speed: 1">
 </a-entity>
@@ -1939,7 +2002,7 @@ scale="1.2 1.2 1.2">
           gltf-model="#navmesh-blue"
           rotation="0 -90 0"
           position="0 0 0"
-          class="drawingArea navmesh"
+          class="drawingArea navmesh laser-zone"
           visible="false"
           area-fade-gradient="target: #element-blue-area; zone: blue; maxOpacity: 1; minOpacity: 0.04; speed: 1">
 </a-entity>
@@ -1949,7 +2012,7 @@ scale="1.2 1.2 1.2">
           gltf-model="#navmesh-red"
           rotation="0 -90 0"
           position="0 0 0"
-          class="drawingArea navmesh"
+          class="drawingArea navmesh laser-zone"
           visible="false"
           area-fade-gradient="target: #element-red-area; zone: red; maxOpacity: 1; minOpacity: 0.04; speed: 1">
 </a-entity>
@@ -1959,7 +2022,7 @@ scale="1.2 1.2 1.2">
           gltf-model="#navmesh-yellow"
           rotation="0 -90 0"
           position="0 0 0"
-          class="drawingArea navmesh"
+          class="drawingArea navmesh laser-zone"
           visible="false"
           area-fade-gradient="target: #element-yellow-area; zone: yellow; maxOpacity: 1; minOpacity: 0.04; speed: 1">
 </a-entity>
@@ -1969,20 +2032,20 @@ scale="1.2 1.2 1.2">
           gltf-model="#navmesh-green"
           rotation="0 -90 0"
           position="0 0 0"
-          class="drawingArea navmesh"
+         class="drawingArea navmesh laser-zone"
           visible="false"
           area-fade-gradient="target: #element-green-area; zone: green; maxOpacity: 1; minOpacity: 0.04; speed: 1">
 </a-entity>
 
 <!-- VIOLET / INDIGO -->
 <a-entity id="navmesh-indigo-element"
-          gltf-model="#navmesh-indigo"
-          rotation="0 -90 0"
-          position="0 0 0"
-          class="drawingArea navmesh"
-          visible="false"
-          area-fade-gradient="target: #element-violet-area; zone: indigo; maxOpacity: 1; minOpacity: 0.04; speed: 1">
+  gltf-model="#navmesh-indigo"
+  rotation="0 -90 0"
+  position="0 0 0"
+  class="drawingArea navmesh laser-zone"
+  visible="false">
 </a-entity>
+
 
 
 <!-- drawing space elements -->
