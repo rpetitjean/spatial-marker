@@ -1069,7 +1069,11 @@ AFRAME.registerComponent('laser-beam', {
 
     idleColor:  { type: 'color', default: '#ffffff' },
     hoverColor: { type: 'color', default: '#00ff66' },
-    fadeSpeed:  { type: 'number', default: 22 }
+    fadeSpeed:  { type: 'number', default: 22 },
+
+    // NEW: keep laser-controls/raycaster helper line permanently hidden
+    hideControllerLine: { type: 'boolean', default: true },
+    hideEveryMs:        { type: 'int', default: 250 } // periodic enforcement
   },
 
   init() {
@@ -1092,12 +1096,14 @@ AFRAME.registerComponent('laser-beam', {
     this._idle = new THREE.Color(this.data.idleColor);
     this._hover = new THREE.Color(this.data.hoverColor);
     this._current = this._idle.clone();
-    this._target = this._idle.clone();
+    this._target  = this._idle.clone();
 
     this._isHovering = false;
 
+    // Parent "hand" entity (where laser-controls + raycaster live)
+    this.hand = this.el.parentEl;
+
     // Intersections come from the HAND's raycaster (parent)
-    const hand = this.el.parentEl;
     this._onHit = (e) => {
       const els = (e.detail && e.detail.els) || [];
       this._isHovering = !!els[0];
@@ -1108,18 +1114,86 @@ AFRAME.registerComponent('laser-beam', {
       this._target.copy(this._idle);
     };
 
-    hand.addEventListener('raycaster-intersection', this._onHit);
-    hand.addEventListener('raycaster-intersection-cleared', this._onClear);
+    if (this.hand) {
+      this.hand.addEventListener('raycaster-intersection', this._onHit);
+      this.hand.addEventListener('raycaster-intersection-cleared', this._onClear);
+    }
 
+    // Controller line hiding (Meta menu resume fix)
     this._materialTweaked = false;
+    this._hideAcc = 0;
+
+    this._hideControllerLineNow = this._hideControllerLineNow.bind(this);
+    this._hideSoon = () => setTimeout(this._hideControllerLineNow, 50);
+
+    if (this.data.hideControllerLine) {
+      // Apply quickly at start + after XR lifecycle / reconnects
+      this._hideSoon();
+
+      const scene = this.el.sceneEl;
+      if (scene) {
+        scene.addEventListener('enter-vr', this._hideSoon);
+        scene.addEventListener('exit-vr',  this._hideSoon);
+      }
+
+      if (this.hand) {
+        this.hand.addEventListener('controllerconnected', this._hideSoon);
+        this.hand.addEventListener('controllermodelready', this._hideSoon);
+      }
+
+      // Meta button often triggers visibilitychange (pause/resume)
+      this._onVisibility = () => {
+        if (!document.hidden) this._hideSoon();
+      };
+      document.addEventListener('visibilitychange', this._onVisibility, false);
+    }
   },
 
   remove() {
-    const hand = this.el.parentEl;
+    const hand = this.hand;
     if (hand) {
       hand.removeEventListener('raycaster-intersection', this._onHit);
       hand.removeEventListener('raycaster-intersection-cleared', this._onClear);
+      hand.removeEventListener('controllerconnected', this._hideSoon);
+      hand.removeEventListener('controllermodelready', this._hideSoon);
     }
+
+    const scene = this.el.sceneEl;
+    if (scene) {
+      scene.removeEventListener('enter-vr', this._hideSoon);
+      scene.removeEventListener('exit-vr',  this._hideSoon);
+    }
+
+    if (this._onVisibility) {
+      document.removeEventListener('visibilitychange', this._onVisibility, false);
+    }
+  },
+
+  _hideControllerLineNow() {
+    if (!this.data.hideControllerLine) return;
+    const hand = this.hand;
+    if (!hand) return;
+
+    // Keep raycaster helper disabled
+    hand.setAttribute('raycaster', 'showLine', false);
+
+    // Keep A-Frame line component hidden (laser-controls uses it)
+    hand.setAttribute('line', { visible: false, opacity: 0 });
+
+    // Hide any line object3D created by components
+    const lineObj = hand.getObject3D('line');
+    if (lineObj) lineObj.visible = false;
+
+    // Some versions store raycaster line directly
+    const rc = hand.components && hand.components.raycaster;
+    if (rc && rc.line) rc.line.visible = false;
+
+    // Nuclear: hide ANY THREE.Line on the controller graph
+    hand.object3D.traverse((o) => {
+      if (o && (o.isLine || o.type === 'Line' || o.type === 'LineSegments')) {
+        o.visible = false;
+      }
+    });
   },
 
   _tweakMaterialOnce() {
@@ -1154,14 +1228,24 @@ AFRAME.registerComponent('laser-beam', {
   },
 
   tick(time, dt) {
-    const hand = this.el.parentEl;
+    const hand = this.hand;
     const rc = hand && hand.components && hand.components.raycaster;
     if (!rc) return;
+
+    // Periodically re-hide controller line (handles Meta menu resume)
+    if (this.data.hideControllerLine) {
+      this._hideAcc += dt;
+      if (this._hideAcc >= this.data.hideEveryMs) {
+        this._hideAcc = 0;
+        this._hideControllerLineNow();
+      }
+    }
 
     this._tweakMaterialOnce();
 
     // ----- align cylinder to raycaster origin+direction -----
     const d = rc.data;
+
     this._dir.set(d.direction.x, d.direction.y, d.direction.z);
     if (this._dir.lengthSq() < 1e-8) return;
     this._dir.normalize();
@@ -1819,9 +1903,9 @@ scale="1.2 1.2 1.2">
 </a-entity>
 
 
-<a-entity id="element-Goethe" gltf-model="assets/goethe-colors/goethe-written.glb" position="0.38916 1.39795 0" flat-override="opacity: 0.2" fade-on-event="targets: #goethe-text; duration: 3; hold: 5; group: goetheTexts" class="clickable" scale="0.3 0.3 0.3" rotation="0 -90 0"></a-entity>
-<a-entity id="element-theory" gltf-model="assets/goethe-colors/theoryofcolors.glb" position="0.43605 1.18089 0" flat-override="opacity: 0.2" fade-on-event="targets: #diagram-text; duration: 3; hold: 5; group: goetheTexts" class="clickable" scale="0.3 0.3 0.3" rotation="0 -90 0"></a-entity>
-<a-entity id="element-diagram" gltf-model="assets/goethe-colors/colordiagram.glb" position="0.45782 0.99437 0" flat-override="opacity: 0.2" fade-on-event="targets: #theory-text; duration: 3; hold: 5; group: goetheTexts" class="clickable" scale="0.3 0.3 0.3" rotation="0 -90 0"></a-entity>
+<a-entity id="element-Goethe" gltf-model="assets/goethe-colors/goethe-written.glb" position="0.38916 1.39795 0" flat-override="opacity: 0.6" fade-on-event="targets: #goethe-text; duration: 3; hold: 5; group: goetheTexts" class="clickable" scale="0.3 0.3 0.3" rotation="0 -90 0"></a-entity>
+<a-entity id="element-theory" gltf-model="assets/goethe-colors/theoryofcolors.glb" position="0.43605 1.18089 0" flat-override="opacity: 0.6" fade-on-event="targets: #diagram-text; duration: 3; hold: 5; group: goetheTexts" class="clickable" scale="0.3 0.3 0.3" rotation="0 -90 0"></a-entity>
+<a-entity id="element-diagram" gltf-model="assets/goethe-colors/colordiagram.glb" position="0.45782 0.99437 0" flat-override="opacity: 0.6" fade-on-event="targets: #theory-text; duration: 3; hold: 5; group: goetheTexts" class="clickable" scale="0.3 0.3 0.3" rotation="0 -90 0"></a-entity>
 <a-entity gltf-model="#table" rotation="0 -90 0" position="0 0 0" visible="true"></a-entity>
 
 
@@ -1934,10 +2018,10 @@ position="5.44141 1.79871 2.94187" gradient-color="color1: #ffffff; color2: #f0f
 <a-entity id="gemein" gltf-model="#gemein" position="-0.10445 2.28755 6.31301" flat-override="opacity: 0.52" scale="0.75 0.75 0.75" rotation="0 180 0"></a-entity>
 <a-entity id="unnothig" gltf-model="#unnothig" position="-5.21878 2.28755 3.2757" flat-override="opacity: 0.52" scale="0.75 0.75 0.75" rotation="0 126.22317522511548 0"></a-entity>
 <a-entity id="schon" gltf-model="#schon" position="-5.45174 2.28755 -3.07225" flat-override="opacity: 0.52" scale="0.75 0.75 0.75" rotation="0 60.677376419944444 0"></a-entity>
-<a-entity id="verstand" gltf-model="#verstand" position="3.23791 -0.03986 -0.62757" flat-override="opacity: 0.2" rotation="-53.44607608759832 -70.61074571412753 0"></a-entity>
-<a-entity id="sinnlichkeit" gltf-model="#sinnlichkeit" position="1.12832 0.17646 2.8613" flat-override="opacity: 0.2" rotation="-52.5980985508047 -158.30422809008053 4.646687718510977"></a-entity>
-<a-entity id="phantasie" gltf-model="#phantasie" position="-3.18411 0.25267 0.40501" flat-override="opacity: 0.2" rotation="-70.0079941136499 94.2475465944545 11.106213900815877"></a-entity>
-<a-entity id="vernunft" gltf-model="#vernunft" position="-1.32109 0.22329 -2.73259" flat-override="opacity: 0.2" rotation="-65.7698253030672 21.4790418238643 8.341692539309655"></a-entity>
+<a-entity id="verstand" gltf-model="#verstand" position="3.23791 -0.03986 -0.62757" flat-override="opacity: 0.7" rotation="-53.44607608759832 -70.61074571412753 0"></a-entity>
+<a-entity id="sinnlichkeit" gltf-model="#sinnlichkeit" position="1.12832 0.17646 2.8613" flat-override="opacity: 0.7" rotation="-52.5980985508047 -158.30422809008053 4.646687718510977"></a-entity>
+<a-entity id="phantasie" gltf-model="#phantasie" position="-3.18411 0.25267 0.40501" flat-override="opacity: 0.7" rotation="-70.0079941136499 94.2475465944545 11.106213900815877"></a-entity>
+<a-entity id="vernunft" gltf-model="#vernunft" position="-1.32109 0.22329 -2.73259" flat-override="opacity: 0.7" rotation="-65.7698253030672 21.4790418238643 8.341692539309655"></a-entity>
 
 </a-scene>
 
