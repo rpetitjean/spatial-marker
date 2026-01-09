@@ -1102,8 +1102,6 @@ AFRAME.registerComponent('laser-beam', {
 });
 </script>
 
-
-
   </head>
 
   <body>
@@ -1672,7 +1670,7 @@ raycaster="objects: .clickable">
 <a-box camera="far: 700; fov: 55; near: 0.1; active: true" position="0 1.7 0" visible="false" ></a-box>
 <a-entity id="left-hand"
           laser-controls="hand: left"
-          raycaster="objects: .clickable; far: 6; showLine: false"
+          raycaster="objects: .clickable; far: 6; showLine: false"  line="opacity: 0; visible: false"
           cursor="rayOrigin: entity; fuse: false">
 
   <a-entity class="laser-beam"
@@ -1685,7 +1683,7 @@ raycaster="objects: .clickable">
 
 <a-entity id="right-hand"
           laser-controls="hand: right"
-          raycaster="objects: .clickable; far: 6; showLine: false"
+          raycaster="objects: .clickable; far: 6; showLine: false"  line="opacity: 0; visible: false"
           cursor="rayOrigin: entity; fuse: false">
 
   <a-entity class="laser-beam"
