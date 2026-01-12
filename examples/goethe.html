@@ -139,7 +139,8 @@
     <a-asset-item id="navmesh-red" src="assets/goethe-colors/navmesh-red.glb"></a-asset-item>
     <a-asset-item id="navmesh-yellow" src="assets/goethe-colors/navmesh-yellow.glb"></a-asset-item>
 
-    <!-- 3D Framed used accross experience from CC0 asset by the Cleveland Museum of Art (https://sketchfab.com/3d-models/195821-mount-sainte-victoire-10d9d7aa5dac45b899b1cf5ba00a5e2b) -->
+    <!-- 3D Framed used accross experience from CC0 asset by the Cleveland Museum of Art 
+    (https://sketchfab.com/3d-models/195821-mount-sainte-victoire-10d9d7aa5dac45b899b1cf5ba00a5e2b) -->
     <a-asset-item id="element-frame" src="assets/goethe-colors/frame-env.glb"></a-asset-item>
 
     <!-- A-frame components used through the Goethe's Theory of Colors world -->
@@ -353,7 +354,37 @@ position="5.44141 1.79871 2.94187" gradient-color="color1: #ffffff; color2: #f0f
 
 </a-scene>
 
-    <script src="js/xr/raycast-handler.js"></script>
-    
+<script>
+  AFRAME.registerComponent('raycast-handler', {
+    init: function() {
+      var el = this.el;
+      var marker = document.querySelector('#debug-marker');
+
+      el.addEventListener('raycaster-intersection', function(evt) {
+        var intersection = evt.detail.intersections[0];
+        marker.setAttribute('position', intersection.point);
+        marker.setAttribute('visible', true);
+      });
+
+      el.addEventListener('raycaster-intersection-cleared', function(evt) {
+        marker.setAttribute('visible', false);
+      });
+    },
+
+    tick: function() {
+      var intersections = this.el.components.raycaster.intersections;
+      var marker = document.querySelector('#debug-marker');
+      if (intersections.length > 0) {
+        var intersectionPoint = intersections[0].point;
+        marker.setAttribute('position', intersectionPoint);
+      }
+    }
+  });
+
+  document.querySelector('#right-hand').setAttribute('raycast-handler', '');
+  document.querySelector('#left-hand').setAttribute('raycast-handler', '');
+
+</script>
+
   </body>
 </html>
