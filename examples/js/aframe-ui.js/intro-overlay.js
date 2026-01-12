@@ -312,6 +312,7 @@
         console.warn('[intro-overlay] No text provided (text1 / text2 empty).');
         this.overlay.style.display = 'none';
         this.langButton.style.display = 'none';
+        
         this.sceneEl.emit('intro-start', { lang: null });
         return;
       }

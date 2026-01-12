@@ -412,6 +412,7 @@
   bottom: 16px !important;
   right: 16px !important;
   left: auto !important;
-  z-index: 100000 !important;
+  z-index: 99999 !important;
   pointer-events: auto !important;
 }
+
