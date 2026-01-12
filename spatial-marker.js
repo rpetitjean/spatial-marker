@@ -1,8 +1,19 @@
 /**
  
-Spatial Marker is calling to 7 different A-Frame components develloped in this script and is the one to use the a-scene.
+Spatial Marker is calling to 7 different A-Frame components develloped in this script and is the one to attach to your VR Rig in the a-scene.
 
-The 7 components are:
+This Component is made to be used for Meta Quest devices with Meta Touch Controllers. 
+
+It should be attached to your rig this way:
+
+    <!-- VR Rig -->
+    <a-entity  id="rig" spatial-marker>
+      <a-box id="camera" camera="fov:75; near: 0.1; far: 700"  position="0 1.7 0" visible="false" ></a-box>
+      <a-entity id="left-hand"  meta-touch-controls="hand: left"></a-entity>
+      <a-entity id="right-hand" meta-touch-controls="hand: right"></a-entity>
+    </a-entity>  
+
+The 7 components composing it are:
 - painting-area-controller: manages the draxing area and enables/disables drawing and locomotion according to the position of the rig
 - paint-tool-reset: manages the assignment of the painting hand and the palette hand
 - draw-line: allows drawing lines in 3D space
@@ -98,7 +109,7 @@ AFRAME.registerComponent('spatial-marker', {
 _applySizePickerOptions(handEl){
   if (!handEl.hasAttribute('active-brush')) return;
   handEl.setAttribute('size-picker', {
-    sizes: this.data.markerSize,   // <-- was this.data.sizes
+    sizes: this.data.markerSize,   
     hintSize: this.data.hintSize || 0.1,
 
     imgHint: this.data.imgHint,
@@ -183,7 +194,8 @@ _applySizePickerOptions(handEl){
 
 
 // 1) PAINTING-AREA-CONTROLLER
-// manages the draxing area and enables/disables drawing and locomotion according to the position of the rig
+// manages the drawing area and enables/disables drawing and locomotion according to the position of the rig
+// also handles controller tints and UI showing/hiding
 AFRAME.registerComponent('painting-area-controller', {
   schema: { areaSelector: { default: '.drawingArea' } },
 
@@ -367,7 +379,6 @@ _clearTints() {
   }
 });
 
-
 // 2) PAINT-TOOL-RESET
 // manages the assignment of the painting hand and the palette hand
 AFRAME.registerComponent('paint-tool-reset', {
@@ -487,6 +498,7 @@ AFRAME.registerComponent('draw-line', {
       this.indicator.position.set(0,0,-d.tipOffset);
     }
   },
+
   startLine() {
     this.drawing = true;
     this.points.length = 0;
@@ -500,6 +512,7 @@ AFRAME.registerComponent('draw-line', {
     this.currentMesh.frustumCulled = false;
     this.el.sceneEl.object3D.add(this.currentMesh);
   },
+
   stopLine() {
     this.drawing = false;
     this.indicator.visible = true;
@@ -514,6 +527,7 @@ AFRAME.registerComponent('draw-line', {
     this.drawn.push({tube:this.currentMesh, startCap, endCap});
     this.currentMesh=null;
   },
+
   deleteLast() {
     const last=this.drawn.pop();
     if (!last) return;
@@ -523,6 +537,7 @@ AFRAME.registerComponent('draw-line', {
       m.material.dispose();
     });
   },
+
   tick() {
     if (!this.drawing || !this.currentMesh) return;
     const pos=new AFRAME.THREE.Vector3();
@@ -539,6 +554,7 @@ AFRAME.registerComponent('draw-line', {
     this.currentMesh.geometry = geo;
     this.currentMesh.material.color.set(this.data.color);
   },
+  
   disableInput() {
     this.el.removeEventListener('triggerdown', this._onTriggerDown);
     this.el.removeEventListener('triggerup',   this._onTriggerUp);
@@ -549,6 +565,7 @@ AFRAME.registerComponent('draw-line', {
     this.el.removeEventListener('xbuttondown', this._onDelete);
     this.indicator.visible = false;
   },
+
   enableInput() {
     this.el.addEventListener('triggerdown', this._onTriggerDown);
     this.el.addEventListener('triggerup',   this._onTriggerUp);
@@ -1008,7 +1025,7 @@ AFRAME.registerComponent('color-picker',{
 // basic VRlocomotion using meta-touch-controls thumbstick
 AFRAME.registerComponent('thumbstick-controls', {
     schema: {
-        acceleration: { default: 25 },
+        acceleration: { default: 20 },
         rigSelector: {default: "#rig"},
         fly: { default: false },
         controllerOriented: { default: false },
