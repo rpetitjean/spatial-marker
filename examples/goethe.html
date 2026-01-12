@@ -22,7 +22,6 @@
     
     <!-- A-frame components for the XR laser -->
     <script src="js/xr/laser-beam.js"></script>
-    <script src="js/xr/raycast-handler.js"></script>
 
     <!-- A-frame components used through the Goethe's Theory of Colors world -->
     <script src="assets/goethe-colors/js/components/area-fade-gradient.js"></script>
@@ -38,7 +37,6 @@
   </head>
 
   <body>
-
 
   <div id="ui-topright">
     <button id="btn-music" class="ui-circle" aria-label="Toggle music" title="Music">
@@ -56,9 +54,6 @@
   </a>
 
 
-
-
-
 <script src="assets/goethe-colors/js/ui/music-ui.js"></script>
 <script src="assets/goethe-colors/js/ui/pop-up.js"></script>
 
@@ -73,7 +68,7 @@
                fadeOutMs: 600;
                pauseWhenHidden: true"
   
-    intro-overlay="
+    intro-overlayy="
     backgroundColor: #ffffff;
     textColor: #000000;
     fontFamily: system-ui;
@@ -354,37 +349,8 @@ position="5.44141 1.79871 2.94187" gradient-color="color1: #ffffff; color2: #f0f
 
 </a-scene>
 
-<script>
-  AFRAME.registerComponent('raycast-handler', {
-    init: function() {
-      var el = this.el;
-      var marker = document.querySelector('#debug-marker');
-
-      el.addEventListener('raycaster-intersection', function(evt) {
-        var intersection = evt.detail.intersections[0];
-        marker.setAttribute('position', intersection.point);
-        marker.setAttribute('visible', true);
-      });
-
-      el.addEventListener('raycaster-intersection-cleared', function(evt) {
-        marker.setAttribute('visible', false);
-      });
-    },
-
-    tick: function() {
-      var intersections = this.el.components.raycaster.intersections;
-      var marker = document.querySelector('#debug-marker');
-      if (intersections.length > 0) {
-        var intersectionPoint = intersections[0].point;
-        marker.setAttribute('position', intersectionPoint);
-      }
-    }
-  });
-
-  document.querySelector('#right-hand').setAttribute('raycast-handler', '');
-  document.querySelector('#left-hand').setAttribute('raycast-handler', '');
-
-</script>
+<!-- Raycast-handlers components - works with the debug marker under the VR rig and sets a small sphere where raycasting is occuring -->
+<script src="js/xr/raycast-handler.js"></script>
 
   </body>
 </html>
