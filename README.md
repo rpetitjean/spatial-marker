@@ -138,7 +138,7 @@ Add the spatial-marker component to your A-Frame VR Rig
 - **[Palette Builder (tool)](https://rpetitjean.github.io/spatial-marker/examples/palette-builder.html)**  
   A simple tool to define and customize color palettes.
 
-📣 Check the [A-Frame Painter](https://github.com/Elettrotecnica/a-painter) by A-Frame creators if you are looking for a deeper painting tool. 
+## 📣 Check the [A-Frame Painter](https://github.com/Elettrotecnica/a-painter) by A-Frame creators if you are looking for a deeper painting tool. 
 
 ## 💻 Note on the role of ChatGPT
 Most of the Javascript (and CSS) codelines were written with ChatGPT 5.0 and 5.2, and reviewed and adapted by me.
