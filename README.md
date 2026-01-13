@@ -140,4 +140,5 @@ Add the spatial-marker component to your A-Frame VR Rig
 
 ## 📃License
 
-[MIT](https://choosealicense.com/licenses/mit/)
+MIT License
+Copyright (c) 2026 Remi Petitjean
